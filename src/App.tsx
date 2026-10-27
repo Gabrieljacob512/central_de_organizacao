@@ -17,6 +17,7 @@ import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { KnowledgeBaseModal } from './components/knowledge/KnowledgeBaseModal';
 import { NotificationPreferencesModal } from './components/notifications/NotificationPreferencesModal';
 import { NotificationsView } from './components/notifications/NotificationsView';
+import { PeopleView } from './components/people/PeopleView';
 import { UserManagementModal } from './components/users/UserManagementModal';
 import { PersonalWorkspaceView } from './components/workspace/PersonalWorkspaceView';
 import { exportCalendarToIcs } from './services/differentiatorsService';
@@ -365,6 +366,11 @@ export default function App() {
             currentUser={currentUser}
             now={now}
           />
+        )}
+
+        {/* Gestão de Pessoas & RH */}
+        {view === 'people' && (
+          <PeopleView currentUser={currentUser} />
         )}
 
         {/* 5. Espaço Privado do Usuário */}
