@@ -64,16 +64,11 @@ export function UnifiedTicketsView({
 
   return (
     <div className="space-y-4">
-      {/* Cabeçalho da Página com Alternador Lista | Kanban e Botão Novo Chamado */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white">
-            Chamados
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Gerencie e acompanhe as solicitações em visualização de tabela ou fluxo Kanban.
-          </p>
-        </div>
+      {/* Controles da Página com Alternador Lista | Kanban e Botão Novo Chamado */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between -mt-2">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Gerencie e acompanhe as solicitações em visualização de tabela ou fluxo Kanban.
+        </p>
 
         <div className="flex items-center gap-2.5">
           {/* Alternador Lista | Kanban */}

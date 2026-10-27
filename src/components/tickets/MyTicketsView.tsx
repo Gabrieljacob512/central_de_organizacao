@@ -123,15 +123,10 @@ export function MyTicketsView({
 
   return (
     <div className="space-y-4">
-      {/* Cabeçalho */}
-      <div>
-        <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white">
-          Meus Chamados
-        </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Acompanhe suas atribuições de atendimento e os chamados abertos por você.
-        </p>
-      </div>
+      {/* Subtítulo / Contexto */}
+      <p className="text-xs text-slate-500 dark:text-slate-400 -mt-2">
+        Acompanhe suas atribuições de atendimento e os chamados abertos por você.
+      </p>
 
       {/* Controle Segmentado de Abas com Contadores */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3 dark:border-slate-800">

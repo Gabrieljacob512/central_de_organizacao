@@ -16,6 +16,7 @@ import { UnifiedTicketsView } from './components/tickets/UnifiedTicketsView';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { KnowledgeBaseModal } from './components/knowledge/KnowledgeBaseModal';
 import { NotificationPreferencesModal } from './components/notifications/NotificationPreferencesModal';
+import { NotificationsView } from './components/notifications/NotificationsView';
 import { UserManagementModal } from './components/users/UserManagementModal';
 import { PersonalWorkspaceView } from './components/workspace/PersonalWorkspaceView';
 import { exportCalendarToIcs } from './services/differentiatorsService';
@@ -23,6 +24,7 @@ import { exportCalendarToIcs } from './services/differentiatorsService';
 import { useAuditLogs } from './hooks/useAuditLogs';
 import { useCalendarEvents } from './hooks/useCalendarEvents';
 import { useCurrentUser } from './hooks/useCurrentUser';
+import { useNotifications } from './hooks/useNotifications';
 import { usePersonalWorkspace } from './hooks/usePersonalWorkspace';
 import { useTicketFilters } from './hooks/useTicketFilters';
 import { useTickets } from './hooks/useTickets';
@@ -70,6 +72,8 @@ export default function App() {
     updateCurrentUser,
     logout,
   } = useCurrentUser();
+
+  const { unreadCount } = useNotifications(currentUser?.id);
 
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [userManagementOpen, setUserManagementOpen] = useState(false);
@@ -257,7 +261,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f8fafc] text-slate-800 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
-      {/* Menu Lateral Retrátil (10 Itens Obrigatórios) */}
+      {/* Menu Lateral Retrátil (13 Itens Obrigatórios) */}
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -265,6 +269,7 @@ export default function App() {
         view={view}
         onViewChange={handleViewChange}
         onLogout={logout}
+        unreadNotificationsCount={unreadCount}
       />
 
       {/* Cabeçalho com Sino de Notificações em Tempo Real */}
@@ -276,6 +281,8 @@ export default function App() {
           if (t) setSelectedId(t.id);
         }}
         onOpenPreferences={() => setNotifPreferencesOpen(true)}
+        onNavigate={handleViewChange}
+        onLogout={logout}
       />
 
       {/* Conteúdo Principal de Trabalho */}
@@ -341,6 +348,13 @@ export default function App() {
             now={now}
             onSelectTicket={(id) => setSelectedId(id)}
             onNewTicket={() => setCreateOpen(true)}
+          />
+        )}
+
+        {/* Notificações */}
+        {view === 'notifications' && (
+          <NotificationsView
+            onSelectTicket={(id) => setSelectedId(id)}
           />
         )}
 

@@ -1,9 +1,9 @@
 import { ArrowUpDown, Building2, Columns3, Filter, Flag, Rows3, Search, Tag, UserCheck, Users, X, type LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { DEPARTMENTS, PRIORITIES, STATUSES } from '../../constants/config';
+import { ALL_DEPARTMENTS, PRIORITIES, STATUSES } from '../../constants/config';
 import { SORT_LABELS } from '../../hooks/useTicketFilters';
 import type { Department, SortOption, TicketFilters, UserProfile, ViewMode } from '../../types/ticket';
-import { isPresident } from '../../utils/rbac';
+import { isExecutive } from '../../utils/rbac';
 
 interface ToolbarProps {
   filters: TicketFilters;
@@ -81,7 +81,7 @@ export function Toolbar({
   onToggleMyTickets,
 }: ToolbarProps) {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-  const isPresidentUser = isPresident(currentUser);
+  const isExecutiveUser = isExecutive(currentUser);
 
   return (
     <section
@@ -192,11 +192,11 @@ export function Toolbar({
         className={`${
           mobileFiltersOpen ? 'grid' : 'hidden'
         } mt-3 animate-fade-in grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid ${
-          isPresidentUser ? 'lg:grid-cols-5' : 'lg:grid-cols-3'
+          isExecutiveUser ? 'lg:grid-cols-5' : 'lg:grid-cols-3'
         }`}
       >
-        {/* Filtros Departamentais: EXCLUSIVOS DO PRESIDENTE (Seção 7) */}
-        {isPresidentUser && (
+        {/* Filtros Departamentais: EXCLUSIVOS DE EXECUTIVOS (Presidente e Vice-presidente) */}
+        {isExecutiveUser && (
           <>
             {/* Setor Responsável */}
             <FilterSelect
@@ -207,8 +207,8 @@ export function Toolbar({
               active={Boolean(filters.assignedDepartment && filters.assignedDepartment !== 'all')}
               onChange={(value) => onFilterChange('assignedDepartment', value as Department | 'all')}
             >
-              <option value="all">Setor Responsável: Todos</option>
-              {DEPARTMENTS.map((dept) => (
+              <option value="all">Todos os departamentos</option>
+              {ALL_DEPARTMENTS.map((dept) => (
                 <option key={dept} value={dept}>
                   Resp: {dept}
                 </option>
@@ -224,8 +224,8 @@ export function Toolbar({
               active={filters.department !== 'all'}
               onChange={(value) => onFilterChange('department', value as TicketFilters['department'])}
             >
-              <option value="all">Origem: Todos</option>
-              {DEPARTMENTS.map((department) => (
+              <option value="all">Todos os departamentos</option>
+              {ALL_DEPARTMENTS.map((department) => (
                 <option key={department} value={department}>
                   Origem: {department}
                 </option>

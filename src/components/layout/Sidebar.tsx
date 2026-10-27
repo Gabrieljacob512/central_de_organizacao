@@ -1,6 +1,8 @@
 import {
   BarChart3,
+  Bell,
   Calendar,
+  DollarSign,
   History,
   Inbox,
   LayoutDashboard,
@@ -8,10 +10,17 @@ import {
   LogOut,
   Settings,
   UserCheck,
+  Users,
   X,
 } from 'lucide-react';
 import type { UserProfile, ViewMode } from '../../types/ticket';
-import { canViewAudit, getUserRoleBadgeInfo } from '../../utils/rbac';
+import {
+  canViewAudit,
+  canViewFinance,
+  canViewPeople,
+  getUserRoleBadgeInfo,
+  getUserSubtitle,
+} from '../../utils/rbac';
 import { Avatar } from '../ui/Avatar';
 
 interface SidebarProps {
@@ -21,21 +30,25 @@ interface SidebarProps {
   view: ViewMode;
   onViewChange: (view: ViewMode) => void;
   onLogout: () => void;
+  unreadNotificationsCount?: number;
 }
 
 /**
  * Menu Lateral Retrátil (Slide Drawer - Mobile First).
- * Estrutura obrigatória:
- * 1. Perfil do usuário no topo: foto (ou iniciais), nome, cargo e departamento.
- * 2. Visão Geral das Solicitações
- * 3. Chamados (unificado)
- * 4. Meus Chamados
- * 5. Painel Executivo & Métricas
- * 6. Espaço Privado
- * 7. Calendário
- * 8. Auditoria (somente Presidente e Diretor)
- * 9. Configurações
- * 10. Sair (logout) no rodapé da sidebar
+ * Estrutura rigorosa de 13 itens:
+ * 1. Perfil do usuário no topo
+ * 2. Visão Geral das Solicitações (overview)
+ * 3. Chamados (tickets)
+ * 4. Meus Chamados (my-tickets)
+ * 5. Notificações (notifications) com ponto vermelho indicador dinâmico
+ * 6. Painel Executivo & Métricas (metrics)
+ * 7. Financeiro (finance - condicionado a finance.view)
+ * 8. Pessoas (people - condicionado a people.view_all)
+ * 9. Espaço Privado (workspace)
+ * 10. Calendário (calendar)
+ * 11. Auditoria (audit - condicionado a audit.view)
+ * 12. Configurações (settings)
+ * 13. Sair da Conta (logout no rodapé)
  */
 export function Sidebar({
   open,
@@ -44,9 +57,12 @@ export function Sidebar({
   view,
   onViewChange,
   onLogout,
+  unreadNotificationsCount = 0,
 }: SidebarProps) {
   const roleBadge = getUserRoleBadgeInfo(currentUser);
   const hasAuditAccess = canViewAudit(currentUser);
+  const hasFinanceAccess = canViewFinance(currentUser);
+  const hasPeopleAccess = canViewPeople(currentUser);
 
   const isCurrentView = (itemKey: ViewMode) => {
     if (itemKey === 'tickets') {
@@ -78,11 +94,33 @@ export function Sidebar({
       visible: true,
     },
     {
+      id: 'nav-notifications',
+      key: 'notifications' as ViewMode,
+      label: 'Notificações',
+      icon: Bell,
+      visible: true,
+      badge: unreadNotificationsCount > 0 ? unreadNotificationsCount : null,
+    },
+    {
       id: 'nav-metrics',
       key: 'metrics' as ViewMode,
       label: 'Painel Executivo & Métricas',
       icon: BarChart3,
       visible: true,
+    },
+    {
+      id: 'nav-finance',
+      key: 'finance' as ViewMode,
+      label: 'Financeiro',
+      icon: DollarSign,
+      visible: hasFinanceAccess,
+    },
+    {
+      id: 'nav-people',
+      key: 'people' as ViewMode,
+      label: 'Pessoas',
+      icon: Users,
+      visible: hasPeopleAccess,
     },
     {
       id: 'nav-workspace',
@@ -103,7 +141,7 @@ export function Sidebar({
       key: 'audit' as ViewMode,
       label: 'Auditoria',
       icon: History,
-      visible: hasAuditAccess, // Somente Presidente e Diretor
+      visible: hasAuditAccess,
     },
     {
       id: 'nav-settings',
@@ -138,7 +176,7 @@ export function Sidebar({
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="space-y-5 overflow-y-auto pr-1">
+        <div className="space-y-4 overflow-y-auto pr-1">
           {/* Cabeçalho do Menu com Logo e Botão Fechar */}
           <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
             <div className="flex items-center gap-2.5">
@@ -191,15 +229,11 @@ export function Sidebar({
                   </p>
 
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 uppercase dark:border-blue-900/60 dark:bg-blue-950/60 dark:text-blue-300">
-                      {currentUser.department}
-                    </span>
-
                     <span
                       className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold ${roleBadge.badgeClass}`}
                     >
                       <span>{roleBadge.icon}</span>
-                      <span>{roleBadge.label}</span>
+                      <span>{getUserSubtitle(currentUser)}</span>
                     </span>
                   </div>
                 </div>
@@ -208,7 +242,7 @@ export function Sidebar({
           )}
 
           {/* ==================================================================== */}
-          {/* NAVEGAÇÃO COMPLETA RIGOROSAMENTE NA ORDEM DEFINIDA */}
+          {/* NAVEGAÇÃO COMPLETA RIGOROSAMENTE NA ORDEM DEFINIDA (2 A 12) */}
           {/* ==================================================================== */}
           <nav className="space-y-1" aria-label="Menu principal">
             {navItems
@@ -226,14 +260,25 @@ export function Sidebar({
                       onViewChange(item.key);
                       onClose();
                     }}
-                    className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition cursor-pointer ${
+                    className={`flex min-h-[44px] w-full items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-semibold transition cursor-pointer ${
                       active
                         ? 'bg-blue-600 text-white shadow-xs dark:bg-blue-600'
                         : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                     }`}
                   >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{item.label}</span>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+
+                    {item.key === 'notifications' && item.badge ? (
+                      <span
+                        className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white shadow-xs"
+                        aria-label={`${item.badge} notificações não lidas`}
+                      >
+                        {item.badge > 9 ? '9+' : item.badge}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
@@ -241,7 +286,7 @@ export function Sidebar({
         </div>
 
         {/* ==================================================================== */}
-        {/* 10. SAIR DA CONTA (LOGOUT) NO RODAPÉ */}
+        {/* 13. SAIR DA CONTA (LOGOUT) NO RODAPÉ */}
         {/* ==================================================================== */}
         <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
           <button
