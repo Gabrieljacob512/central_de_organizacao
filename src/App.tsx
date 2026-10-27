@@ -7,6 +7,7 @@ import { CalendarView } from './components/calendar/CalendarView';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
 import { MetricsCards } from './components/metrics/MetricsCards';
+import { MetricsDashboard } from './components/metrics/MetricsDashboard';
 import { KanbanBoard } from './components/tickets/KanbanBoard';
 import { TicketDetailsDrawer } from './components/tickets/TicketDetailsDrawer';
 import { TicketFormModal } from './components/tickets/TicketFormModal';
@@ -77,6 +78,17 @@ export default function App() {
   }, [tickets, currentUser]);
 
   const { filters, updateFilter, resetFilters, filtered, activeFilterCount } = useTicketFilters(visibleTickets);
+  const [myTicketsOnly, setMyTicketsOnly] = useState(false);
+
+  const displayTickets = useMemo(() => {
+    if (!myTicketsOnly) return filtered;
+    return filtered.filter(
+      (t) =>
+        t.assignee === currentUser?.name ||
+        t.requester === currentUser?.name ||
+        t.email === currentUser?.email
+    );
+  }, [filtered, myTicketsOnly, currentUser]);
 
   const [view, setView] = useState<ViewMode>(loadViewMode);
   const [createOpen, setCreateOpen] = useState(false);
@@ -365,6 +377,9 @@ export default function App() {
             {/* Cards de Métricas (Calculados com base nos chamados visíveis do setor / empresa) */}
             <MetricsCards tickets={visibleTickets} now={now} />
 
+            {/* Painel Gráfico Executivo com Recharts (Fase 5) */}
+            <MetricsDashboard tickets={visibleTickets} now={now} />
+
             {/* Barra de Busca e Filtros com Isolamento de Setor */}
             <Toolbar
               filters={filters}
@@ -373,13 +388,15 @@ export default function App() {
               activeFilterCount={activeFilterCount}
               view={view}
               onViewChange={setView}
-              resultCount={filtered.length}
+              resultCount={displayTickets.length}
               totalCount={visibleTickets.length}
               currentUser={currentUser}
+              myTicketsOnly={myTicketsOnly}
+              onToggleMyTickets={() => setMyTicketsOnly((prev) => !prev)}
             />
 
             {/* Exibição Tabela ou Kanban com Controle de Permissão de Exclusão (Requisito 2 & 3) */}
-            {filtered.length === 0 ? (
+            {displayTickets.length === 0 ? (
               visibleTickets.length === 0 ? (
                 <EmptyState
                   title={`Nenhum chamado no setor de ${currentUser.department}`}
@@ -396,10 +413,21 @@ export default function App() {
                 />
               ) : (
                 <EmptyState
-                  title="Nenhum chamado encontrado"
-                  description="Nenhum resultado corresponde à busca e aos filtros selecionados. Ajuste os critérios ou limpe os filtros."
+                  title={myTicketsOnly ? 'Nenhum chamado atribuído a você' : 'Nenhum chamado encontrado'}
+                  description={
+                    myTicketsOnly
+                      ? 'Você não possui chamados sob sua responsabilidade direta no momento.'
+                      : 'Nenhum resultado corresponde à busca e aos filtros selecionados. Ajuste os critérios ou limpe os filtros.'
+                  }
                   action={
-                    <button type="button" className="btn-secondary min-h-[44px]" onClick={resetFilters}>
+                    <button
+                      type="button"
+                      className="btn-secondary min-h-[44px]"
+                      onClick={() => {
+                        resetFilters();
+                        setMyTicketsOnly(false);
+                      }}
+                    >
                       Limpar filtros aplicados
                     </button>
                   }
@@ -407,7 +435,7 @@ export default function App() {
               )
             ) : view === 'table' ? (
               <TicketTable
-                tickets={filtered}
+                tickets={displayTickets}
                 now={now}
                 onOpen={openTicket}
                 onDelete={setDeleteTarget}
@@ -415,7 +443,7 @@ export default function App() {
               />
             ) : (
               <KanbanBoard
-                tickets={filtered}
+                tickets={displayTickets}
                 now={now}
                 onOpen={openTicket}
                 onChangeStatus={handleChangeStatus}
@@ -428,7 +456,7 @@ export default function App() {
       </main>
 
       <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-500 transition-colors duration-200 sm:px-6 lg:px-8 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-        Tecno System · Sistema de Service Desk & Gestão de Incidentes · RBAC & Isolamento Setorial por LocalStorage
+        Tecno System · Sistema de Service Desk & Gestão de Incidentes · PostgreSQL, Supabase RLS & Edge Functions
       </footer>
 
       {/* Modais e Painéis */}

@@ -160,3 +160,40 @@
   @apply inline-flex min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-4 focus-visible:ring-slate-300/30 focus-visible:outline-none dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100;
 }
 
+/* ==========================================================================
+   Estilos de Impressão e Exportação para PDF (@media print)
+   ========================================================================== */
+@media print {
+  header,
+  aside,
+  #menu-hamburger-btn,
+  #notification-bell-btn,
+  #open-new-ticket,
+  #toggle-mobile-filters,
+  #toggle-charts-btn,
+  #export-csv-btn,
+  #print-report-btn,
+  footer,
+  [role="dialog"] {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .shadow-2xs,
+  .shadow-xs,
+  .shadow-md,
+  .shadow-2xl {
+    box-shadow: none !important;
+  }
+}
+

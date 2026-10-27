@@ -63,11 +63,23 @@ export function getSlaInfo(ticket: Ticket, now: number): SlaInfo {
   const remaining = due - now;
   const consumed = clamp(((now - created) / total) * 100);
 
+  if (ticket.status === 'Pendente') {
+    return {
+      state: 'on_track',
+      label: 'Relógio Pausado',
+      detail: 'SLA congelado (status Pendente)',
+      consumed,
+      remainingMs: remaining,
+    };
+  }
+
+  const TWO_HOURS = 2 * HOUR;
+
   if (remaining <= 0) {
     return { state: 'breached', label: 'Atrasado', detail: `Vencido há ${formatDuration(remaining)}`, consumed: 100, remainingMs: remaining };
   }
-  if (remaining <= total * AT_RISK_THRESHOLD) {
-    return { state: 'at_risk', label: 'Em risco', detail: `Restam ${formatDuration(remaining)}`, consumed, remainingMs: remaining };
+  if (remaining < TWO_HOURS || remaining <= total * AT_RISK_THRESHOLD) {
+    return { state: 'at_risk', label: 'Próximo do Estouro (< 2h)', detail: `Restam ${formatDuration(remaining)}`, consumed, remainingMs: remaining };
   }
   return { state: 'on_track', label: 'No prazo', detail: `Restam ${formatDuration(remaining)}`, consumed, remainingMs: remaining };
 }

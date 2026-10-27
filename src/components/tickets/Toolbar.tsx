@@ -1,4 +1,4 @@
-import { ArrowUpDown, Building2, Columns3, Filter, Flag, Rows3, Search, Tag, Users, X, type LucideIcon } from 'lucide-react';
+import { ArrowUpDown, Building2, Columns3, Filter, Flag, Rows3, Search, Tag, UserCheck, Users, X, type LucideIcon } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { DEPARTMENTS, PRIORITIES, STATUSES } from '../../constants/config';
 import { SORT_LABELS } from '../../hooks/useTicketFilters';
@@ -15,6 +15,8 @@ interface ToolbarProps {
   resultCount: number;
   totalCount: number;
   currentUser?: UserProfile | null;
+  myTicketsOnly?: boolean;
+  onToggleMyTickets?: () => void;
 }
 
 interface FilterSelectProps {
@@ -75,6 +77,8 @@ export function Toolbar({
   resultCount,
   totalCount,
   currentUser,
+  myTicketsOnly = false,
+  onToggleMyTickets,
 }: ToolbarProps) {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const isPresidentUser = isPresident(currentUser);
@@ -126,6 +130,25 @@ export function Toolbar({
               </span>
             )}
           </button>
+
+          {/* Filtro Rápido: Meus Chamados */}
+          {onToggleMyTickets && (
+            <button
+              id="toggle-my-tickets-btn"
+              type="button"
+              onClick={onToggleMyTickets}
+              className={`flex min-h-[38px] sm:min-h-[34px] cursor-pointer items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs sm:text-sm font-semibold transition-all ${
+                myTicketsOnly
+                  ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-2xs dark:border-blue-500 dark:bg-blue-950 dark:text-blue-300'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400'
+              }`}
+              title="Filtrar chamados atribuídos a você ou abertos por você"
+            >
+              <UserCheck className="h-4 w-4" />
+              <span className="hidden sm:inline">Meus Chamados</span>
+              <span className="sm:hidden">Meus</span>
+            </button>
+          )}
 
           {/* Alternador de Modo de Visualização: Tabela / Kanban */}
           <div
