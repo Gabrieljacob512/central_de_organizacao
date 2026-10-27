@@ -9,7 +9,7 @@ import {
   Mail,
   ShieldAlert,
 } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import type { AuthResult } from '../../hooks/useCurrentUser';
 import type { UserProfile } from '../../types/ticket';
 import { ThemeToggle } from '../ui/ThemeToggle';
@@ -49,6 +49,7 @@ export function AuthScreen({
   // Formulário de Login
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   // Formulário de Redefinição
   const [resetEmail, setResetEmail] = useState('');
@@ -107,26 +108,16 @@ export function AuthScreen({
     }
   };
 
-  /** Preenchimento e login rápido para contas de demonstração (Seed Users em DEV) */
-  const handleQuickSeed = async (email: string, pass: string) => {
+  /**
+   * Acesso rápido para contas de demonstração (somente DEV).
+   * Preenche apenas o e-mail: a senha NÃO fica no código. Ela vem de SEED_DEFAULT_PASSWORD
+   * (definida no .env e aplicada por `npm run dev:reset-users`).
+   */
+  const handleQuickSeed = (email: string) => {
     setErrorMsg(null);
     setLoginEmail(email);
-    setLoginPassword(pass);
-    setLoading(true);
-    try {
-      const result = await onLogin(email, pass);
-      if (result.success && result.user) {
-        showToast.success(
-          `Conectado como ${result.user.role}`,
-          `Sessão iniciada como ${result.user.name} (${result.user.department}).`,
-        );
-        onSuccess(result.user);
-      } else {
-        setErrorMsg(result.error ?? 'Falha ao autenticar.');
-      }
-    } finally {
-      setLoading(false);
-    }
+    setLoginPassword('');
+    requestAnimationFrame(() => passwordInputRef.current?.focus());
   };
 
   return (
@@ -255,6 +246,7 @@ export function AuthScreen({
                   <Lock className="absolute top-3 left-3 h-4 w-4 text-slate-400" />
                   <input
                     id="login-password"
+                    ref={passwordInputRef}
                     type={showPassword ? 'text' : 'password'}
                     required
                     value={loginPassword}
@@ -294,7 +286,7 @@ export function AuthScreen({
                     <button
                       type="button"
                       id="quick-login-presidente"
-                      onClick={() => handleQuickSeed('presidente@gmail.com', 'Presidente@2026')}
+                      onClick={() => handleQuickSeed('presidente@gmail.com')}
                       className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 p-2 text-center transition hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 cursor-pointer"
                     >
                       <span className="text-xs font-bold text-amber-900 dark:text-amber-200">Presidente</span>
@@ -305,7 +297,7 @@ export function AuthScreen({
                     <button
                       type="button"
                       id="quick-login-vp"
-                      onClick={() => handleQuickSeed('vicepresidente@tecnosystem.com', 'Presidente@2026')}
+                      onClick={() => handleQuickSeed('vicepresidente@tecnosystem.com')}
                       className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50/80 p-2 text-center transition hover:bg-indigo-100 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 cursor-pointer"
                     >
                       <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200">Vice-pres.</span>
@@ -316,7 +308,7 @@ export function AuthScreen({
                     <button
                       type="button"
                       id="quick-login-rh"
-                      onClick={() => handleQuickSeed('rh@tecnosystem.com', 'Tecno@2026!')}
+                      onClick={() => handleQuickSeed('rh@tecnosystem.com')}
                       className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-purple-200 bg-purple-50/80 p-2 text-center transition hover:bg-purple-100 dark:border-purple-900/60 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 cursor-pointer"
                     >
                       <span className="text-xs font-bold text-purple-900 dark:text-purple-200">Diretor RH</span>
@@ -327,7 +319,7 @@ export function AuthScreen({
                     <button
                       type="button"
                       id="quick-login-projetos"
-                      onClick={() => handleQuickSeed('projetos@tecnosystem.com', 'Tecno@2026!')}
+                      onClick={() => handleQuickSeed('projetos@tecnosystem.com')}
                       className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-blue-200 bg-blue-50/80 p-2 text-center transition hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 cursor-pointer"
                     >
                       <span className="text-xs font-bold text-blue-900 dark:text-blue-200">Projetos</span>

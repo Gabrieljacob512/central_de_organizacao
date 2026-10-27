@@ -37,7 +37,7 @@ async function runPhase4Tests() {
   // Login Presidente
   const { data: presAuth, error: presErr } = await anonClient.auth.signInWithPassword({
     email: 'presidente@gmail.com',
-    password: process.env.SEED_PRESIDENT_PASSWORD || 'Presidente@2026',
+    password: process.env.SEED_DEFAULT_PASSWORD || process.env.SEED_PRESIDENT_PASSWORD || 'Presidente@2026',
   });
   assert(!presErr && Boolean(presAuth.session), 'Autenticação do Presidente');
   const presToken = presAuth.session!.access_token;
@@ -50,7 +50,7 @@ async function runPhase4Tests() {
   // Login Membro de TI
   const { data: memAuth, error: memErr } = await anonClient.auth.signInWithPassword({
     email: 'mariana.souza@tecnosystem.com.br',
-    password: 'Tecno@2026!',
+    password: process.env.SEED_DEFAULT_PASSWORD || 'Tecno@2026!',
   });
   assert(!memErr && Boolean(memAuth.session), 'Autenticação do Membro de TI');
   const memberToken = memAuth.session!.access_token;

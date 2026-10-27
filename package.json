@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "seed": "tsx scripts/seed-dev.ts",
+    "dev:reset-users": "tsx scripts/reset-dev-users.ts",
     "test:phase1": "tsx tests/phase1-acceptance.test.ts",
     "test:phase2": "tsx tests/phase2-acceptance.test.ts",
     "test:phase3": "tsx tests/phase3-acceptance.test.ts",

@@ -112,7 +112,9 @@ VITE_SUPABASE_URL=http://127.0.0.1:54321
 VITE_SUPABASE_ANON_KEY=sua_chave_anonima_aqui
 SUPABASE_SERVICE_ROLE_KEY=sua_chave_service_role_aqui
 SEED_PRESIDENT_PASSWORD=Presidente@2026
+SEED_DEFAULT_PASSWORD=defina_uma_senha_forte_aqui
 ```
+Confira se `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` são idênticas a `API_URL` e `ANON_KEY` de `npx supabase status -o env`.
 
 ### 3. Popular o banco de dados oficial (Seed)
 ```bash
@@ -124,6 +126,22 @@ npm run seed
 npm run dev
 ```
 Acesse a aplicação em `http://localhost:5173/`.
+
+### 5. Recriar/corrigir os usuários de demonstração (somente DEV)
+```bash
+npm run dev:reset-users
+```
+O script [`scripts/reset-dev-users.ts`](scripts/reset-dev-users.ts) usa a `SUPABASE_SERVICE_ROLE_KEY` para:
+1. Criar (`createUser`) ou atualizar (`updateUserById`) todos os usuários de demonstração com `email_confirm: true` e a senha de `SEED_DEFAULT_PASSWORD`;
+2. Criar ou corrigir a linha em `profiles` com o **mesmo ID do Auth**, cargo e departamento principal;
+3. Ajustar `department_memberships` (Presidente → Administração; Vice-presidente → Administração + Projetos como diretor; Diretores e Membros → seu departamento);
+4. Testar `signInWithPassword` + leitura do próprio perfil para cada usuário e imprimir uma tabela com e-mail, senha e resultado.
+
+> Proteções: o script se recusa a rodar se `NODE_ENV=production` ou se `VITE_SUPABASE_URL` não apontar para `localhost`/`127.0.0.1`.
+
+Usuários criados direto no Auth também recebem perfil automaticamente pelo trigger `on_auth_user_created` (migration `20261027000007`).
+
+Em modo dev, falhas de login exibem no console do navegador o erro real do Supabase (`[authService:signInWithPassword]` / `[authService:profiles.select]` com código, status e mensagem). O usuário final continua vendo só a mensagem genérica.
 
 ---
 
@@ -159,7 +177,7 @@ npm run build
 | **Diretor de Projetos** | `projetos@tecnosystem.com` | Projetos | Gestão de chamados de Projetos, exclusão de chamados do setor, auditoria setorial |
 | **Membro (Colaborador)** | `mariana.souza@tecnosystem.com.br` | Projetos | Abertura e acompanhamento de chamados do próprio setor; sem exclusão e sem auditoria |
 
-*Senha inicial padrão: `Presidente@2026` para o Presidente e Vice-presidente; `Tecno@2026!` para os demais colaboradores.*
+*Todos os usuários de demonstração usam a senha definida em `SEED_DEFAULT_PASSWORD` (aplicada por `npm run dev:reset-users` e `npm run seed`). Os botões de acesso rápido da tela de login (somente em DEV) preenchem apenas o e-mail.*
 
 ---
 

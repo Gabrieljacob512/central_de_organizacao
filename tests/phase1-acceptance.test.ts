@@ -73,7 +73,7 @@ async function runTests() {
   const tiClient = createClient<Database>(supabaseUrl, anonKey);
   const { data: tiAuth, error: tiLoginErr } = await tiClient.auth.signInWithPassword({
     email: 'mariana.souza@tecnosystem.com.br',
-    password: 'Tecno@2026!',
+    password: process.env.SEED_DEFAULT_PASSWORD || 'Tecno@2026!',
   });
 
   if (tiLoginErr || !tiAuth.user) {
@@ -101,7 +101,7 @@ async function runTests() {
   // Teste 5: Acesso Global do Presidente
   console.log('\n--- Teste 5: Acesso Global do Presidente (ticket.view_all) ---');
   const presClient = createClient<Database>(supabaseUrl, anonKey);
-  const presidentPass = process.env.SEED_PRESIDENT_PASSWORD || 'Presidente@2026';
+  const presidentPass = process.env.SEED_DEFAULT_PASSWORD || process.env.SEED_PRESIDENT_PASSWORD || 'Presidente@2026';
   const { data: presAuth, error: presLoginErr } = await presClient.auth.signInWithPassword({
     email: 'presidente@gmail.com',
     password: presidentPass,

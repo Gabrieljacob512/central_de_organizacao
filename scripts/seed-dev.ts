@@ -128,8 +128,10 @@ async function main() {
   const roleMap = new Map<string, string>();
   roles.forEach((r) => roleMap.set(r.name, r.id));
 
-  const presidentPassword = process.env.SEED_PRESIDENT_PASSWORD || 'Presidente@2026';
-  const defaultMemberPassword = 'Tecno@2026!';
+  // SEED_DEFAULT_PASSWORD é a fonte única (mesma usada por `npm run dev:reset-users`).
+  const presidentPassword =
+    process.env.SEED_DEFAULT_PASSWORD || process.env.SEED_PRESIDENT_PASSWORD || 'Presidente@2026';
+  const defaultMemberPassword = process.env.SEED_DEFAULT_PASSWORD || 'Tecno@2026!';
 
   const userProfileMap = new Map<string, string>(); // email -> profile.id
 

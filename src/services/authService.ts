@@ -53,6 +53,28 @@ export function mapDatabaseProfileToUserProfile(
   };
 }
 
+/** Indica se o código roda em modo de desenvolvimento (Vite DEV ou NODE_ENV=development) */
+const IS_DEV: boolean =
+  (typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV)) ||
+  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NODE_ENV === 'development';
+
+/**
+ * Registra no console o erro real do Supabase (código, status e mensagem) somente em desenvolvimento.
+ * O usuário final continua vendo apenas a mensagem genérica.
+ */
+function logSupabaseErrorDev(context: string, err: unknown): void {
+  if (!IS_DEV || !err) return;
+  const e = err as { code?: string; status?: number; message?: string; details?: string; hint?: string; name?: string };
+  console.error(`[authService:${context}]`, {
+    name: e.name,
+    code: e.code,
+    status: e.status,
+    message: e.message,
+    details: e.details,
+    hint: e.hint,
+  });
+}
+
 /**
  * Autentica o usuário com Supabase Auth e carrega seu perfil correspondente.
  * Se o usuário estiver inativo (is_active = false), o acesso é bloqueado imediatamente.
@@ -69,6 +91,7 @@ export async function signIn(email: string, pass: string): Promise<AuthProfileRe
   });
 
   if (authErr || !authData.user) {
+    logSupabaseErrorDev('signInWithPassword', authErr ?? { message: 'Resposta sem usuário' });
     return { success: false, error: 'Credenciais inválidas. Verifique seu e-mail e senha.' };
   }
 
@@ -90,6 +113,7 @@ export async function signIn(email: string, pass: string): Promise<AuthProfileRe
     .single();
 
   if (profileErr || !profile) {
+    logSupabaseErrorDev('profiles.select', profileErr ?? { message: `Nenhuma linha em profiles para id=${authData.user.id}` });
     await supabase.auth.signOut();
     return { success: false, error: 'Perfil de usuário não encontrado no sistema.' };
   }
