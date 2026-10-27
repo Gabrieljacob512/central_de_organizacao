@@ -108,16 +108,26 @@ export function AuthScreen({
     }
   };
 
-  /**
-   * Acesso rápido para contas de demonstração (somente DEV).
-   * Preenche apenas o e-mail: a senha NÃO fica no código. Ela vem de SEED_DEFAULT_PASSWORD
-   * (definida no .env e aplicada por `npm run dev:reset-users`).
-   */
-  const handleQuickSeed = (email: string) => {
+  /** Preenchimento e login rápido para contas de demonstração (Seed Users em DEV) */
+  const handleQuickSeed = async (email: string, pass: string = 'Tecno@2026!') => {
     setErrorMsg(null);
     setLoginEmail(email);
-    setLoginPassword('');
-    requestAnimationFrame(() => passwordInputRef.current?.focus());
+    setLoginPassword(pass);
+    setLoading(true);
+    try {
+      const result = await onLogin(email, pass);
+      if (result.success && result.user) {
+        showToast.success(
+          `Conectado como ${result.user.role}`,
+          `Sessão iniciada como ${result.user.name} (${result.user.department}).`,
+        );
+        onSuccess(result.user);
+      } else {
+        setErrorMsg(result.error ?? 'Falha ao autenticar.');
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
