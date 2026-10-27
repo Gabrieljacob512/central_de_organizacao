@@ -34,8 +34,8 @@ async function runPhase2Tests() {
   console.log('🧪 EXECUTANDO TESTES DE ACEITE - FASE 2 (APIs, RPCs E STORAGE)');
   console.log('=============================================================\n');
 
-  // Busca departamento TI
-  const { data: dept } = await adminClient.from('departments').select('id').eq('code', 'TI').single();
+  // Busca departamento Projetos
+  const { data: dept } = await adminClient.from('departments').select('id').eq('code', 'Projetos').single();
   const devDeptId = dept!.id;
 
   // Login do Presidente

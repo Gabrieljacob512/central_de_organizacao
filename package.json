@@ -15,7 +15,8 @@
     "test:phase4": "tsx tests/phase4-acceptance.test.ts",
     "test:phase5": "tsx tests/phase5-acceptance.test.ts",
     "test:phase6": "tsx tests/phase6-acceptance.test.ts",
-    "test:all": "tsx tests/phase1-acceptance.test.ts && tsx tests/phase2-acceptance.test.ts && tsx tests/phase3-acceptance.test.ts && tsx tests/phase4-acceptance.test.ts && tsx tests/phase5-acceptance.test.ts && tsx tests/phase6-acceptance.test.ts"
+    "test:evolution": "tsx tests/acceptance-evolution.test.ts",
+    "test:all": "tsx tests/phase1-acceptance.test.ts && tsx tests/phase2-acceptance.test.ts && tsx tests/phase3-acceptance.test.ts && tsx tests/phase4-acceptance.test.ts && tsx tests/phase5-acceptance.test.ts && tsx tests/phase6-acceptance.test.ts && tsx tests/acceptance-evolution.test.ts"
   },
 
   "dependencies": {

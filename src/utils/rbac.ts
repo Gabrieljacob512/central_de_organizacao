@@ -98,6 +98,8 @@ export function canUseDepartmentFilter(user: UserProfile | null | undefined): bo
   return isPresident(user);
 }
 
+export const canFilterByDepartment = canUseDepartmentFilter;
+
 /**
  * Regra de Permissão de Eventos Globais do Calendário:
  * Apenas Diretores e o Presidente podem criar ou apagar eventos corporativos globais.

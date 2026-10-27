@@ -64,7 +64,7 @@ async function runPhase3Tests() {
   const testTicketId = 'TS-PHASE3-COMM';
   await adminClient.from('tickets').delete().eq('id', testTicketId);
 
-  const { data: tiDept } = await adminClient.from('departments').select('id').eq('code', 'TI').single();
+  const { data: tiDept } = await adminClient.from('departments').select('id').eq('code', 'Projetos').single();
   const { error: ticketErr } = await adminClient.from('tickets').insert({
     id: testTicketId,
     title: 'Chamado Teste Comentários e Anexos',

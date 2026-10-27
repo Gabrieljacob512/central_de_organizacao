@@ -5,62 +5,74 @@
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL_17-3ecf8e?style=flat-square&logo=supabase)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4.3-38bdf8?style=flat-square&logo=tailwindcss)
 ![PWA Ready](https://img.shields.io/badge/PWA-Installable-blueviolet?style=flat-square)
-![Tests](https://img.shields.io/badge/Acceptance_Tests-100%25_Passing-success?style=flat-square)
+![Tests](https://img.shields.io/badge/Acceptance_Tests-24%2F24_Passing-success?style=flat-square)
 
-Plataforma corporativa de gestão de chamados, suporte técnico e acompanhamento de demandas desenvolvida para a **Tecno System**, empresa júnior universitária. O sistema integra visualização tabular e Kanban, controle estrito de SLA por prioridade, comentários e anexos em tempo real, dashboard executivo de métricas com Recharts, central de notificações e diferenciais específicos para o ecossistema MEJ (Movimento Empresa Júnior).
+Plataforma corporativa de atendimento, suporte técnico e gestão de demandas da **Tecno System**, empresa júnior universitária. O sistema conta com arquitetura Serverless sobre Supabase (PostgreSQL 17 com RLS ativo), interface mobile-first responsiva com tema claro/escuro sem flash, hierarquia RBAC rigorosa com isolamento setorial nos 4 departamentos oficiais (**Financeiro**, **RH**, **Marketing** e **Projetos**), visualização unificada de chamados em Lista e Kanban, página dedicada "Meus Chamados", Painel Executivo com Recharts, central de Configurações do colaborador e upload atômico de anexos com captura de prints via Ctrl+V.
 
 ---
 
-## 🚀 Principais Funcionalidades
+## 🏛️ Departamentos Oficiais da Empresa Júnior
 
-### 🔐 1. Autenticação, RBAC e Isolamento Setorial
-- **Autenticação Segura**: Gerenciada pelo Supabase Auth (GoTrue), com controle de sessão JWT e recuperação de senha.
-- **Hierarquia RBAC Granular**:
-  - **Presidente (Admin)**: Visão global de todos os chamados, gestão de colaboradores, auditoria e métricas consolidadas.
-  - **Diretores**: Gestão operacional e membros do próprio departamento (TI, RH, Financeiro, Operações).
-  - **Membros**: Abertura, acompanhamento e atendimento de demandas do seu setor.
-  - **Clientes**: Acesso restrito via Portal do Cliente (apenas visualização dos chamados próprios e avaliação de atendimento).
-- **Isolamento por RLS (Row Level Security)**: 100% das consultas ao PostgreSQL passam por políticas ativas no banco de dados.
+O sistema opera estritamente com os 4 departamentos oficiais da Tecno System:
+- **Financeiro (`FIN`)**: Contas, reembolso, notas fiscais e tesouraria.
+- **RH (`RH`)**: Recrutamento, seleção, feedback, clima e gestão de pessoas.
+- **Marketing (`MKT`)**: Identidade visual, mídias sociais, comunicação e branding.
+- **Projetos (`PRJ`)**: Desenvolvimento, consultoria técnica, engenharia e entregas a clientes.
 
-### 📋 2. Gestão de Chamados & SLA Dinâmico
-- **Visualização Dupla**: Alterne dinamicamente entre visualização em **Tabela** (com ordenação e filtros avançados) e **Quadro Kanban** interativo.
-- **Identificação Automática do Solicitante**: Sessão do colaborador vinculada automaticamente na criação do ticket.
-- **SLA Dinâmico e Alertas Visuais**:
-  - Prazos definidos por prioridade: **Crítica (4h)**, **Alta (8h)**, **Média (24h)** e **Baixa (72h)**.
-  - Badge pulsante quando o prazo estiver a menos de 2 horas do vencimento.
-  - Alerta explícito de SLA estourado.
-  - Status **Pendente** ativa o modo "Relógio Pausado", congelando o cômputo de SLA.
+> [!NOTE]
+> Departamentos legados (`TI` e `Operações`) foram formalmente descontinuados e migrados para **Projetos** e **Marketing**.
 
-### 💬 3. Comunicação & Anexos em Tempo Real
-- **Comentários Públicos vs. Notas Internas**: Anotações confidenciais visíveis apenas para os atendentes da empresa júnior.
-- **Menções Inteligentes (@)**: Notificação instantânea com autocomplete para colaboradores mencionados na discussão.
-- **Upload Seguro de Arquivos**: Armazenamento em bucket privado no Supabase Storage (`ticket-attachments`), com download exclusivo via **Signed URLs temporárias**.
-- **Validação Binária (Magic Bytes)**: Bloqueia executáveis disfarçados validando assinaturas binárias (PNG, JPEG, PDF) com limite de 1 MB.
-- **Edição & Soft Delete**: Histórico com indicação visual de mensagens editadas e exclusão suave rastreável.
+---
 
-### 🔔 4. Central de Notificações In-App
-- **Sino com Badge ao Vivo**: Notificações instantâneas via canal WebSocket do Supabase Realtime.
-- **Filtros por Categoria**: Menções (@), mudanças de status, novas atribuições, alertas e quebras de SLA.
-- **Ações em Lote**: Leitura individual ou botão "Marcar todas como lidas".
-- **Painel de Preferências**: O usuário configura quais tipos de evento deseja receber.
+## 📱 Menu Lateral Retrátil (Mobile First)
 
-### 📊 5. Dashboard Executivo & Métricas
-- **Gráficos Reativos com Recharts**:
-  - Volume de chamados por Departamento (Gráfico de Barras com tooltips personalizadas).
-  - Distribuição percentual por Status (Gráfico de Pizza/Donut).
-  - Tempo Médio de Resolução (MTTR) segmentado por prioridade.
-  - Taxa de Cumprimento de SLA (Compliance %).
-- **Exportação CSV com Delimitador pt-BR**: Arquivo com BOM UTF-8 (`\uFEFF`) para compatibilidade perfeita com Microsoft Excel.
-- **Modo de Impressão Executiva**: Estilização dedicada `@media print` para relatórios em PDF.
+A barra lateral deslizante (Slide Drawer) segue rigorosamente a ordem oficial de 10 itens:
 
-### 🌟 6. Diferenciais Empresa Júnior
-- **Vínculo com Projetos da EJ**: Associação de demandas a projetos de consultoria ativos (ex.: `PRJ-ERP-01`, `PRJ-MKT-02`).
-- **Avaliação CSAT (1 a 5 Estrelas)**: Coleta de satisfação do solicitante após a resolução do chamado.
-- **Base de Conhecimento & FAQs**: Guias rápidos, tutoriais de acesso e políticas corporativas com busca textual e tags.
-- **Reabertura Controlada (Regra dos 7 Dias)**: Solicitantes podem reabrir chamados resolvidos em até 7 dias mediante justificativa formal.
-- **Conformidade LGPD**: Anonimização completa de dados pessoais (Direito ao Esquecimento) preservando o histórico operacional.
-- **Exportação de Calendário (.ICS)**: Download da agenda de eventos no padrão RFC 5545 compatível com Google Calendar, Outlook e Apple Calendar.
-- **PWA Instalável**: Suporte offline básico para shell estático e experiência app nativa.
+1. **Perfil do Usuário**: Foto de perfil (ou iniciais), nome completo, e-mail institucional e badges de cargo/departamento.
+2. **Visão Geral das Solicitações**: Painel inicial enxuto com resumo da fila operacional, chamados recentes e atalhos rápidos.
+3. **Chamados**: Central unificada com alternância imediata entre visualização em **Lista** e **Quadro Kanban**, preservando busca e filtros compartilhados. No celular, o padrão é Lista.
+4. **Meus Chamados**: Página dedicada com abas segmentadas **"Atribuídos a mim"** e **"Abertos por mim"**, contadores em tempo real, badges de prioridade/status, ordenação por SLA e toggle para exibir chamados encerrados.
+5. **Painel Executivo & Métricas**: Métricas de atendimento consolidadas (Volume por setor, distribuição por status, MTTR e cumprimento de SLA). O filtro de departamento é de uso exclusivo do Presidente.
+6. **Espaço Privado**: Bloco confidencial de anotações e tarefas particulares do colaborador logado.
+7. **Calendário**: Calendário corporativo e pessoal com exportação no padrão RFC 5545 (`.ics`).
+8. **Auditoria**: Trilha de auditoria imutável (exclusivo para Presidente e Diretores; Membros recebem bloqueio com 403 amigável).
+9. **Configurações**: Central do colaborador organizada em 3 abas (**Aparência**, **Perfil** e **Segurança**).
+10. **Sair da Conta (Logout)**: Encerramento seguro da sessão JWT ativa via Supabase Auth.
+
+---
+
+## ⚙️ Módulo de Configurações (3 Abas)
+
+- **Aba Aparência**:
+  - Seleção de tema: **Claro** ou **Escuro**.
+  - Script síncrono no `<head>` do `index.html` garantindo zero flash de tema no carregamento.
+  - Sincronização automática com `profiles.theme` no PostgreSQL e cache local.
+- **Aba Perfil**:
+  - Alteração de nome (mínimo 2, máximo 80 caracteres).
+  - Alteração de e-mail institucional com estado pendente de confirmação via Supabase Auth.
+  - Seletor de departamento bloqueado para membros e diretores; alteração permitida apenas para o Presidente e protegida por trigger no banco.
+  - Upload de foto de perfil no bucket `avatars`: limite estrito de 1 MB, validação de formato e cabeçalho binário (*magic bytes*), preview circular e remoção pelo titular.
+- **Aba Segurança**:
+  - Exigência de reautenticação com a senha atual antes de permitir alteração.
+  - Nova senha com validação de complexidade (mínimo 8 caracteres, contendo letras e números).
+  - Indicador dinâmico de força da senha e alternância de visibilidade (olho).
+  - Proteção contra força bruta: bloqueio automático temporário após 5 tentativas incorretas.
+  - Remoção automática da flag `must_change_password` após a troca bem-sucedida.
+
+---
+
+## 📎 Anexos na Criação do Chamado (Fluxo Atômico em 2 Fases)
+
+O formulário de abertura de chamados conta com área de anexos localizada diretamente abaixo da descrição:
+- **Limite por arquivo**: 1 MB (1.048.576 bytes).
+- **Limite por chamado**: até 5 arquivos simultâneos.
+- **Formatos aceitos**: `.png`, `.jpg`, `.jpeg`, `.pdf`, `.txt`, `.docx`, `.xlsx`.
+- **Bloqueio explícito de executáveis**: rejeição automática de `.exe`, `.bat`, `.cmd`, `.sh`, `.msi`, etc.
+- **Interatividade**: Área de drag-and-drop, clique para selecionar e captura direta de prints colados via **Ctrl+V** (*paste* da área de transferência).
+- **Submissão em duas fases**:
+  1. O chamado é inserido e validado primeiro no banco de dados, gerando o identificador `ticket.id`.
+  2. Os arquivos são transmitidos individualmente vinculados ao `ticket.id` com barra de progresso.
+  3. Caso algum arquivo falhe, o chamado permanece íntegro e um botão de reenvio (*retry*) permite reenviar apenas os arquivos que falharam, sem criar registros órfãos.
 
 ---
 
@@ -68,164 +80,76 @@ Plataforma corporativa de gestão de chamados, suporte técnico e acompanhamento
 
 - **Frontend**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/) (Strict Mode)
 - **Build Tool**: [Vite 8](https://vitejs.dev/)
-- **Estilização**: [Tailwind CSS v4](https://tailwindcss.com/) (`@tailwindcss/vite`)
-- **Backend & Banco de Dados**: [Supabase](https://supabase.com/) (PostgreSQL 17, GoTrue Auth, Storage S3, Realtime WebSockets)
+- **Estilização**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **Backend & Banco de Dados**: [Supabase](https://supabase.com/) (PostgreSQL 17, GoTrue Auth, Storage S3 com buckets `ticket-attachments` e `avatars`)
 - **Visualização de Dados**: [Recharts 3](https://recharts.org/)
 - **Ícones**: [Lucide React](https://lucide.dev/)
-- **Validação de Dados**: [Zod 4](https://zod.dev/)
-- **Testes de Aceite**: [Vitest](https://vitest.dev/) & [TSX](https://github.com/privatenumber/tsx)
+- **Validação de Schemas**: [Zod 4](https://zod.dev/)
+- **Testes Automatizados**: [TSX](https://github.com/privatenumber/tsx) executando suítes completas de aceitação
 
 ---
 
-## ⚙️ Pré-requisitos
+## 🚀 Como Rodar Localmente
 
-- **Node.js** >= 20.x
-- **npm** >= 10.x
-- **Docker Desktop** (para execução local do Supabase via CLI)
-- **Supabase CLI** (`npm i -g supabase` ou via `npx supabase`)
-
----
-
-## 📦 Instalação e Execução Local
-
-### 1. Clonar o repositório
+### 1. Clonar e instalar dependências
 ```bash
 git clone https://github.com/tecnosystem/tecnosystem-service-desk.git
 cd tecnosystem-service-desk
-```
-
-### 2. Instalar dependências
-```bash
 npm install
 ```
 
-### 3. Configurar variáveis de ambiente
-Copie o arquivo de exemplo e ajuste as chaves locais:
-```bash
-cp .env.example .env
-```
-
-Conteúdo padrão para ambiente de desenvolvimento local:
+### 2. Configurar o ambiente (.env)
+Certifique-se de que o arquivo `.env` contenha as credenciais do Supabase local:
 ```env
 VITE_SUPABASE_URL=http://127.0.0.1:54321
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
-VITE_ENABLE_STORAGE=true
-VITE_ENABLE_REALTIME=true
-VITE_ENABLE_AUDIT_LOGS=true
+VITE_SUPABASE_ANON_KEY=sua_chave_anonima_aqui
+SUPABASE_SERVICE_ROLE_KEY=sua_chave_service_role_aqui
+SEED_PRESIDENT_PASSWORD=Presidente@2026
 ```
 
-### 4. Iniciar o Supabase Local
+### 3. Popular o banco de dados oficial (Seed)
 ```bash
-npx supabase start
+npm run seed
 ```
-Após a inicialização, o painel do Supabase Studio estará acessível em `http://127.0.0.1:54323` e o Mailpit (emails locais) em `http://127.0.0.1:54324`.
 
-### 5. Executar o Servidor de Desenvolvimento
+### 4. Iniciar o servidor de desenvolvimento
 ```bash
 npm run dev
 ```
-Acesse a aplicação em `http://localhost:5173`.
+Acesse a aplicação em `http://localhost:5173/`.
 
 ---
 
-## 🔑 Credenciais de Acesso Pré-configuradas (Seed)
+## 🧪 Como Rodar os Testes Automatizados
 
-| Usuário | E-mail | Departamento | Cargo / Nível |
-|---|---|---|---|
-| **Presidente** | `presidente@gmail.com` | Diretoria | Presidente (Acesso Global) |
-| **Mariana Souza** | `mariana.souza@tecnosystem.com.br` | TI | Diretor de TI |
-| **Lucas Mendes** | `lucas.mendes@tecnosystem.com.br` | TI | Membro de TI |
-| **Beatriz Lima** | `beatriz.lima@tecnosystem.com.br` | Financeiro | Diretor Financeiro |
-| **Rafael Costa** | `rafael.costa@tecnosystem.com.br` | Operações | Diretor de Operações |
-| **Juliana Rocha** | `juliana.rocha@tecnosystem.com.br` | RH | Diretor de RH |
+A plataforma conta com suítes completas de testes de aceitação:
 
-> **Nota**: As senhas de desenvolvimento inicial seguem a credencial do seed local (`@TecnoSystem2026!` ou a configurada no onboarding).
-
----
-
-## 🧪 Suítes de Testes de Aceite Automatizados
-
-O projeto conta com suítes de testes automatizados dedicadas cobrindo 100% dos requisitos de negócio de cada fase:
-
-| Comando | Descrição da Suíte | Cobertura |
-|---|---|---|
-| `npm run test:phase1` | **Fase 1**: Banco de Dados, RLS, Autenticação e Perfis | 100% |
-| `npm run test:phase2` | **Fase 2**: RPCs Atômicas, Magic Bytes e Trilha de Auditoria | 100% (18/18) |
-| `npm run test:phase3` | **Fase 3**: Comentários, Notas Internas, Anexos e Menções | 100% (17/17) |
-| `npm run test:phase4` | **Fase 4**: Notificações In-App, Leitura e Preferências | 100% (14/14) |
-| `npm run test:phase5` | **Fase 5**: Alertas de SLA, Filtro Meus Chamados, MTTR e CSV | 100% (12/12) |
-| `npm run test:phase6` | **Fase 6**: Projetos, CSAT, Reabertura, LGPD e Calendário RFC 5545 | 100% (17/17) |
-| `npm run test:all` | **Regressão Completa**: Executa todas as 6 suítes sequencialmente | **100%** |
-
-Para verificar a compilação de produção e integridade de tipos:
 ```bash
+# Executa os 24 testes da evolução recente (Seção 12)
+npm run test:evolution
+
+# Executa todas as 7 suítes de testes de aceitação do sistema
+npm run test:all
+
+# Validação do build de produção e tipos TypeScript
 npm run build
 ```
 
 ---
 
-## 📁 Estrutura de Diretórios
+## 👥 Credenciais Padrão para Testes e Demonstração
 
-```
-tecnosystem-service-desk/
-├── docs/                           # Documentação técnica e de arquitetura
-│   ├── API.md                      # Especificação formal da API REST e RPCs
-│   └── ARQUITETURA.md              # Diagramas Mermaid, modelo E-R e decisões técnicas
-├── public/                         # Assets públicos e manifest PWA
-│   ├── manifest.json               # Web App Manifest instalável
-│   ├── sw.js                       # Service Worker para cache de shell offline
-│   └── logo-tecnosystem.png        # Identidade visual da Tecno System
-├── src/
-│   ├── components/                 # Componentes React modularizados
-│   │   ├── audit/                  # Modal da trilha de auditoria
-│   │   ├── auth/                   # Telas de login e recuperação de senha
-│   │   ├── calendar/               # Calendário interativo de eventos
-│   │   ├── knowledge/              # Base de conhecimento e FAQs
-│   │   ├── layout/                 # Cabeçalho e Menu Lateral Drawer
-│   │   ├── lgpd/                   # Modal de privacidade e anonimização
-│   │   ├── metrics/                # Dashboard executivo Recharts
-│   │   ├── notifications/          # Central e preferências de notificações
-│   │   ├── tickets/                # Tabela, Kanban, Detalhes, Anexos e CSAT
-│   │   └── ui/                     # Badges, modais, formulários e temas
-│   ├── hooks/                      # Hooks customizados React
-│   ├── services/                   # Camada de serviços e integração Supabase
-│   ├── types/                      # Tipagens TypeScript estritas e tipos do banco
-│   ├── utils/                      # SLA, RBAC, validações binárias e formatação
-│   └── App.tsx                     # Orquestrador central da aplicação
-├── supabase/
-│   ├── functions/                  # Edge Functions (Deno/TypeScript)
-│   ├── migrations/                 # Migrações versionadas do PostgreSQL
-│   └── seed.sql                    # Carga inicial de dados para desenvolvimento
-└── tests/                          # Suítes de testes de aceite (Fases 1 a 6)
-```
+| Perfil / Cargo | E-mail | Departamento | Permissões Principais |
+| :--- | :--- | :--- | :--- |
+| **Presidente (Admin)** | `presidente@gmail.com` | Projetos | Visão irrestrita global, filtro de departamentos, gestão de colaboradores, auditoria completa |
+| **Diretor de RH** | `rh@tecnosystem.com` | RH | Gestão e chamados do setor de RH, cadastro de usuários, auditoria setorial |
+| **Diretor de Marketing** | `marketing@tecnosystem.com` | Marketing | Gestão e chamados do setor de Marketing, exclusão de chamados do setor, auditoria setorial |
+| **Diretor de Projetos** | `projetos@tecnosystem.com` | Projetos | Gestão de chamados de Projetos, exclusão de chamados do setor, auditoria setorial |
+| **Membro (Colaborador)** | `membro@tecnosystem.com` | Projetos | Abertura e acompanhamento de chamados do próprio setor; sem exclusão e sem auditoria |
+
+*Senha inicial padrão: `Presidente@2026` para o Presidente e `Tecno@2026!` para os demais colaboradores.*
 
 ---
 
-## 🌐 Deploy em Produção
-
-### 1. Backend no Supabase Cloud
-1. Crie um projeto no [Supabase Cloud](https://supabase.com).
-2. Execute o deploy das migrações:
-   ```bash
-   npx supabase link --project-ref <SEU_PROJECT_REF>
-   npx supabase db push
-   ```
-3. Realize o deploy das Edge Functions:
-   ```bash
-   npx supabase functions deploy
-   ```
-
-### 2. Frontend na Vercel ou Netlify
-1. Conecte o repositório GitHub ao painel da Vercel/Netlify.
-2. Defina as variáveis de ambiente de produção:
-   - `VITE_SUPABASE_URL`: URL do projeto no Supabase Cloud.
-   - `VITE_SUPABASE_ANON_KEY`: Chave anônima pública de produção.
-3. Comando de Build: `npm run build`
-4. Diretório de Saída: `dist`
-
----
-
-## 📄 Licença e Direitos
-
-Projeto desenvolvido com exclusividade para a **Tecno System Empresa Júnior**. Todos os direitos reservados.
+## 📄 Licença
+Desenvolvido com exclusividade para a **Tecno System — Empresa Júnior**. Todos os direitos reservados.

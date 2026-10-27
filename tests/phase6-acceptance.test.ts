@@ -70,7 +70,7 @@ async function runPhase6Tests() {
     assert(!!erpProj && erpProj.client_name === 'Alpha Soluções Industriais', 'Projeto PRJ-ERP-01 com cliente identificado');
 
     // Criação de chamado vinculado ao projeto
-    const { data: dept } = await adminClient.from('departments').select('id').eq('code', 'TI').single();
+    const { data: dept } = await adminClient.from('departments').select('id').eq('code', 'Projetos').single();
     const { data: testTicket, error: ticketError } = await adminClient
       .from('tickets')
       .insert({

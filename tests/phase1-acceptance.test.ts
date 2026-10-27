@@ -128,7 +128,7 @@ async function runTests() {
       id: 'TS-TEST-SLA',
       title: 'Chamado Teste SLA',
       description: 'Testando pausas de SLA',
-      department_id: 'd1000000-0000-0000-0000-000000000001',
+      department_id: 'd1000000-0000-0000-0000-000000000007',
       category: 'Software',
       priority: 'Média',
       status: 'Aberto',

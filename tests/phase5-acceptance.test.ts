@@ -78,7 +78,7 @@ async function runPhase5Tests() {
     id: 'user-mariana-uuid',
     name: 'Mariana Souza',
     email: 'mariana.souza@tecnosystem.com.br',
-    department: 'TI' as const,
+    department: 'Projetos' as const,
     role: 'Membro',
     createdAt: new Date().toISOString(),
   };
