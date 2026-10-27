@@ -305,7 +305,10 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "calculate_sla_due_at":
+            "assign_ticket_atomic":
+{ Args: { "p_assigned_department_id"?: string,"p_assignee_id"?: string,"p_ticket_id": string }; Returns: Json
+                           },
+"calculate_sla_due_at":
 { Args: { "p_from_time"?: string,"p_priority": string }; Returns: string
                            },
 "current_department_id":
@@ -332,6 +335,9 @@ isOneToOne: false
       } },
 "has_permission":
 { Args: { "p_permission": string }; Returns: boolean
+                           },
+"transition_ticket_status":
+{ Args: { "p_new_status": string,"p_ticket_id": string }; Returns: Json
                            }
           }
           Enums: {

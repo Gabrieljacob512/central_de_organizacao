@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "seed": "tsx scripts/seed-dev.ts",
-    "test:phase1": "tsx tests/phase1-acceptance.test.ts"
+    "test:phase1": "tsx tests/phase1-acceptance.test.ts",
+    "test:phase2": "tsx tests/phase2-acceptance.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

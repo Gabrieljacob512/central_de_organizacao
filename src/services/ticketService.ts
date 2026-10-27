@@ -213,6 +213,56 @@ export async function createTicket(formData: TicketFormData): Promise<{ success:
   return { success: true, ticket: newTicket };
 }
 
+/**
+ * Transição de status atômica via RPC Postgres (validação, SLA, auditoria e notificações)
+ */
+export async function transitionTicketStatus(
+  ticketId: string,
+  newStatus: Status
+): Promise<{ success: boolean; error?: string; status?: string }> {
+  const { data, error } = await supabase.rpc('transition_ticket_status', {
+    p_ticket_id: ticketId,
+    p_new_status: newStatus,
+  });
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  const res = data as { success: boolean; error?: string; status?: string };
+  if (!res.success) {
+    return { success: false, error: res.error || 'Falha ao transicionar status.' };
+  }
+
+  return { success: true, status: res.status };
+}
+
+/**
+ * Atribuição atômica de responsável e departamento via RPC Postgres
+ */
+export async function assignTicketAtomic(
+  ticketId: string,
+  assigneeId?: string | null,
+  assignedDepartmentId?: string | null
+): Promise<{ success: boolean; error?: string; activeTickets?: number }> {
+  const { data, error } = await supabase.rpc('assign_ticket_atomic', {
+    p_ticket_id: ticketId,
+    p_assignee_id: assigneeId || undefined,
+    p_assigned_department_id: assignedDepartmentId || undefined,
+  });
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  const res = data as { success: boolean; error?: string; assignee_active_tickets?: number };
+  if (!res.success) {
+    return { success: false, error: res.error || 'Falha ao reatribuir chamado.' };
+  }
+
+  return { success: true, activeTickets: res.assignee_active_tickets };
+}
+
 /** Atualização de chamado (status, prioridade, responsável, etc.) */
 export async function updateTicket(
   ticketId: string,
@@ -226,6 +276,19 @@ export async function updateTicket(
     assignee: string | null;
   }>
 ): Promise<{ success: boolean; error?: string }> {
+  // Se for apenas alteração de status, utiliza a RPC atômica
+  if (
+    updates.status !== undefined &&
+    updates.title === undefined &&
+    updates.description === undefined &&
+    updates.priority === undefined &&
+    updates.department === undefined &&
+    updates.assignedDepartment === undefined &&
+    updates.assignee === undefined
+  ) {
+    return transitionTicketStatus(ticketId, updates.status);
+  }
+
   const departments = await getDepartments();
   const payload: Database['public']['Tables']['tickets']['Update'] = {};
 
@@ -273,3 +336,4 @@ export async function deleteTicket(ticketId: string): Promise<{ success: boolean
   }
   return { success: true };
 }
+
