@@ -84,6 +84,31 @@
     color: #f1f5f9;
   }
 
+  /* Previne que inputs, selects e textareas fiquem com fundo branco ao selecionar/focar no modo escuro */
+  html.dark input:focus,
+  html.dark select:focus,
+  html.dark textarea:focus {
+    background-color: #1e293b;
+    color: #f8fafc;
+  }
+
+  /* Previne que autofill do navegador force fundo branco no modo escuro */
+  html.dark input:-webkit-autofill,
+  html.dark input:-webkit-autofill:hover,
+  html.dark input:-webkit-autofill:focus,
+  html.dark textarea:-webkit-autofill,
+  html.dark textarea:-webkit-autofill:hover,
+  html.dark textarea:-webkit-autofill:focus,
+  html.dark select:-webkit-autofill,
+  html.dark select:-webkit-autofill:hover,
+  html.dark select:-webkit-autofill:focus {
+    -webkit-text-fill-color: #f8fafc !important;
+    -webkit-box-shadow: 0 0 0px 1000px #1e293b inset !important;
+    box-shadow: 0 0 0px 1000px #1e293b inset !important;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+
+
   ::selection {
     background: rgb(219 234 254);
     color: rgb(30 58 138);

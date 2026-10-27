@@ -359,7 +359,7 @@ export function UserManagementModal({
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Ex: Carlos Drummond de Andrade"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-4 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-4 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
                     />
                   </div>
                 </div>
@@ -381,7 +381,7 @@ export function UserManagementModal({
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="ex: colaborador@tecnosystem.com"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-4 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-4 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
                     />
                   </div>
                 </div>
@@ -403,7 +403,7 @@ export function UserManagementModal({
                       value={departmentEmail}
                       onChange={(e) => setDepartmentEmail(e.target.value)}
                       placeholder="ex: ti@tecnosystem.com"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-4 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-4 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
                     />
                   </div>
                 </div>
@@ -420,10 +420,10 @@ export function UserManagementModal({
                     id="new-user-department"
                     value={department}
                     onChange={(e) => handleDeptChange(e.target.value as Department)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-sm font-semibold text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 cursor-pointer"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-sm font-semibold text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800 cursor-pointer"
                   >
                     {DEPARTMENTS.map((dept) => (
-                      <option key={dept} value={dept}>
+                      <option key={dept} value={dept} className="bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-100">
                         {dept}
                       </option>
                     ))}
@@ -442,14 +442,14 @@ export function UserManagementModal({
                     id="new-user-role"
                     value={role}
                     onChange={(e) => handleRoleSelect(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-sm font-semibold text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 cursor-pointer"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2.5 text-sm font-semibold text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800 cursor-pointer"
                   >
                     {COMMON_ROLES.map((r) => (
-                      <option key={r} value={r}>
+                      <option key={r} value={r} className="bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-100">
                         {r}
                       </option>
                     ))}
-                    <option value="Outro">Outro cargo personalizado...</option>
+                    <option value="Outro" className="bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-100">Outro cargo personalizado...</option>
                   </select>
                 </div>
 
@@ -469,7 +469,7 @@ export function UserManagementModal({
                       value={customRole}
                       onChange={(e) => setCustomRole(e.target.value)}
                       placeholder="Ex: Coordenador de Infraestrutura"
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-3 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-3 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
                     />
                   </div>
                 )}
@@ -489,9 +489,10 @@ export function UserManagementModal({
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Senha temporária (ex: 123)"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-3 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 font-mono"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-3 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800 font-mono"
                   />
                 </div>
+
               </div>
 
               {/* Informação sobre permissões aplicadas */}

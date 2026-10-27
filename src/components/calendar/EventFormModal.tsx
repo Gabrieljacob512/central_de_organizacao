@@ -137,8 +137,9 @@ export function EventFormModal({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Ex: Reunião de Alinhamento Semanal ou Foco em Relatório"
-            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-3 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 px-3 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
           />
+
         </div>
 
         {/* SELETOR DE ESCOPO: GLOBAL VS. PRIVADO (Requisito 3) */}
@@ -227,7 +228,7 @@ export function EventFormModal({
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-3 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 cursor-pointer"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-3 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800 cursor-pointer"
               />
             </div>
           </div>
@@ -243,7 +244,7 @@ export function EventFormModal({
                 type="time"
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-3 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 cursor-pointer"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-3 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800 cursor-pointer"
               />
             </div>
           </div>
@@ -260,10 +261,10 @@ export function EventFormModal({
               id="event-category"
               value={category}
               onChange={(e) => setCategory(e.target.value as EventCategory)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-3 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 cursor-pointer"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-3 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800 cursor-pointer"
             >
               {(Object.keys(CATEGORY_LABELS) as EventCategory[]).map((cat) => (
-                <option key={cat} value={cat}>
+                <option key={cat} value={cat} className="bg-white text-slate-800 dark:bg-slate-800 dark:text-slate-100">
                   {CATEGORY_LABELS[cat]}
                 </option>
               ))}
@@ -282,8 +283,9 @@ export function EventFormModal({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Detalhes, link da sala virtual ou anotações relevantes..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 resize-none"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2 px-3 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800 resize-none"
           />
+
         </div>
       </form>
     </Modal>
