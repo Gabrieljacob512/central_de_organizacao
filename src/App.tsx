@@ -14,6 +14,7 @@ import { TicketTable } from './components/tickets/TicketTable';
 import { Toolbar } from './components/tickets/Toolbar';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { EmptyState } from './components/ui/EmptyState';
+import { NotificationPreferencesModal } from './components/notifications/NotificationPreferencesModal';
 import { UserManagementModal } from './components/users/UserManagementModal';
 import { PersonalWorkspaceView } from './components/workspace/PersonalWorkspaceView';
 import { useAuditLogs } from './hooks/useAuditLogs';
@@ -83,6 +84,7 @@ export default function App() {
   const [deleteTarget, setDeleteTarget] = useState<Ticket | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notifPreferencesOpen, setNotifPreferencesOpen] = useState(false);
 
   // 5. Espaço Privado e Calendário do Usuário (Requisitos 1, 2 e 3)
   const {
@@ -241,10 +243,15 @@ export default function App() {
         onLogout={logout}
       />
 
-      {/* 4. Cabeçalho Minimalista com Botão de 3 Traços */}
+      {/* 4. Cabeçalho com Sino de Notificações em Tempo Real */}
       <Header
         onToggleSidebar={() => setSidebarOpen(true)}
         onNewTicket={() => setCreateOpen(true)}
+        onSelectTicket={(ticketId) => {
+          const t = visibleTickets.find((item) => item.id === ticketId) || tickets.find((item) => item.id === ticketId);
+          if (t) setSelectedId(t.id);
+        }}
+        onOpenPreferences={() => setNotifPreferencesOpen(true)}
       />
 
       {/* Conteúdo Principal de Trabalho (100% de largura) */}
@@ -523,6 +530,12 @@ export default function App() {
         onClose={() => setAuditModalOpen(false)}
         logs={auditLogs}
         onClearLogs={clearAuditLogs}
+      />
+
+      {/* Modal de Preferências de Notificação (Fase 4) */}
+      <NotificationPreferencesModal
+        open={notifPreferencesOpen}
+        onClose={() => setNotifPreferencesOpen(false)}
       />
     </div>
   );
