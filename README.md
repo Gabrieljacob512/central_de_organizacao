@@ -5,39 +5,46 @@
 ![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL_17-3ecf8e?style=flat-square&logo=supabase)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4.3-38bdf8?style=flat-square&logo=tailwindcss)
 ![PWA Ready](https://img.shields.io/badge/PWA-Installable-blueviolet?style=flat-square)
-![Tests](https://img.shields.io/badge/Acceptance_Tests-24%2F24_Passing-success?style=flat-square)
+![Tests](https://img.shields.io/badge/Acceptance_Tests-39%2F39_Passing-success?style=flat-square)
 
-Plataforma corporativa de atendimento, suporte técnico e gestão de demandas da **Tecno System**, empresa júnior universitária. O sistema conta com arquitetura Serverless sobre Supabase (PostgreSQL 17 com RLS ativo), interface mobile-first responsiva com tema claro/escuro sem flash, hierarquia RBAC rigorosa com isolamento setorial nos 4 departamentos oficiais (**Financeiro**, **RH**, **Marketing** e **Projetos**), visualização unificada de chamados em Lista e Kanban, página dedicada "Meus Chamados", Painel Executivo com Recharts, central de Configurações do colaborador e upload atômico de anexos com captura de prints via Ctrl+V.
+Plataforma corporativa de atendimento, suporte técnico, gestão de demandas, gestão de pessoas e controladoria financeira da **Tecno System**, empresa júnior universitária. O sistema conta com arquitetura Serverless sobre Supabase (PostgreSQL 17 com RLS ativo), interface mobile-first responsiva com tema claro/escuro sem flash, hierarquia RBAC rigorosa (Presidente > Vice-presidente > Diretor > Membro) com isolamento setorial e suporte a múltiplos departamentos (`department_memberships`), visualização unificada de chamados em Lista e Kanban, página dedicada "Meus Chamados", módulo de Pessoas (RH), módulo Financeiro com fechamento contábil e gráficos Recharts no Painel Executivo.
 
 ---
 
-## 🏛️ Departamentos Oficiais da Empresa Júnior
+## 🏛️ Estrutura Organizacional e Departamentos
 
-O sistema opera estritamente com os 4 departamentos oficiais da Tecno System:
-- **Financeiro (`FIN`)**: Contas, reembolso, notas fiscais e tesouraria.
-- **RH (`RH`)**: Recrutamento, seleção, feedback, clima e gestão de pessoas.
+O sistema opera com um departamento executivo transversal e 4 departamentos operacionais:
+- **Administração (`ADM`)**: Departamento executivo (`is_executive_department = true`) ao qual pertencem o Presidente e o Vice-presidente.
+- **Financeiro (`FIN`)**: Contas, receitas, despesas, conciliação e projetos com anexos auditados.
+- **RH (`RH`)**: Recrutamento, seleção, controle de colaboradores e monitoramento de atividade nos chamados via RPC segura.
 - **Marketing (`MKT`)**: Identidade visual, mídias sociais, comunicação e branding.
 - **Projetos (`PRJ`)**: Desenvolvimento, consultoria técnica, engenharia e entregas a clientes.
 
-> [!NOTE]
-> Departamentos legados (`TI` e `Operações`) foram formalmente descontinuados e migrados para **Projetos** e **Marketing**.
+### Hierarquia de Acesso (RBAC)
+1. **Presidente**: Acesso executivo global irrestrito; visualiza e filtra todos os departamentos; gerencia todos os colaboradores; não pode ser inativado se for o último ativo (protegido por trigger `trg_ensure_active_president`).
+2. **Vice-presidente**: Pertence à Administração e atua como Diretor de um departamento operacional; possui prerrogativas executivas globais equivalentes ao Presidente.
+3. **Diretores**: Gerenciam seu respectivo departamento, coordenam membros e possuem acesso à auditoria setorial.
+4. **Membros**: Criam e atendem chamados de seus departamentos vinculados (`department_memberships`).
 
 ---
 
-## 📱 Menu Lateral Retrátil (Mobile First)
+## 📱 Menu Lateral Retrátil (13 Itens Obrigatórios)
 
-A barra lateral deslizante (Slide Drawer) segue rigorosamente a ordem oficial de 10 itens:
+A barra lateral deslizante (Slide Drawer) segue rigorosamente a ordem oficial de 13 itens:
 
-1. **Perfil do Usuário**: Foto de perfil (ou iniciais), nome completo, e-mail institucional e badges de cargo/departamento.
+1. **Perfil do Usuário**: Avatar circular (40px) com iniciais/foto, nome completo, e-mail institucional e subtítulo oficial (`Presidente · Administração` ou `Vice-presidente · Administração e Diretor de [Depto]`).
 2. **Visão Geral das Solicitações**: Painel inicial enxuto com resumo da fila operacional, chamados recentes e atalhos rápidos.
 3. **Chamados**: Central unificada com alternância imediata entre visualização em **Lista** e **Quadro Kanban**, preservando busca e filtros compartilhados. No celular, o padrão é Lista.
-4. **Meus Chamados**: Página dedicada com abas segmentadas **"Atribuídos a mim"** e **"Abertos por mim"**, contadores em tempo real, badges de prioridade/status, ordenação por SLA e toggle para exibir chamados encerrados.
-5. **Painel Executivo & Métricas**: Métricas de atendimento consolidadas (Volume por setor, distribuição por status, MTTR e cumprimento de SLA). O filtro de departamento é de uso exclusivo do Presidente.
-6. **Espaço Privado**: Bloco confidencial de anotações e tarefas particulares do colaborador logado.
-7. **Calendário**: Calendário corporativo e pessoal com exportação no padrão RFC 5545 (`.ics`).
-8. **Auditoria**: Trilha de auditoria imutável (exclusivo para Presidente e Diretores; Membros recebem bloqueio com 403 amigável).
-9. **Configurações**: Central do colaborador organizada em 3 abas (**Aparência**, **Perfil** e **Segurança**).
-10. **Sair da Conta (Logout)**: Encerramento seguro da sessão JWT ativa via Supabase Auth.
+4. **Meus Chamados**: Página dedicada com abas segmentadas **"Atribuídos a mim"** e **"Abertos por mim"**, contadores em tempo real, badges de prioridade/status e ordenação por SLA.
+5. **Notificações**: Central dedicada com contador dinâmico e indicador vermelho de não lidas sincronizado via Realtime.
+6. **Painel Executivo & Métricas**: Métricas de atendimento e seção financeira executiva com 4 gráficos Recharts. O seletor global "Todos os departamentos" é exclusivo dos executivos.
+7. **Pessoas**: Gestão de colaboradores internos (RH), controle de ativação/inativação e relatório agregado de atividade dos atendentes via RPC `hr_responders_stats`.
+8. **Financeiro**: Módulo contábil mensal com entradas, saídas, saldo em centavos inteiros, projetos com anexos e fechamento auditado.
+9. **Espaço Privado**: Bloco confidencial de anotações e tarefas particulares do colaborador logado.
+10. **Calendário**: Calendário corporativo e pessoal com exportação no padrão RFC 5545 (`.ics`).
+11. **Auditoria**: Trilha de auditoria imutável (exclusivo para Presidente, Vice-presidente e Diretores).
+12. **Configurações**: Central do colaborador organizada em 3 abas (**Aparência**, **Perfil** e **Segurança**).
+13. **Sair da Conta (Logout)**: Encerramento seguro da sessão JWT ativa via Supabase Auth.
 
 ---
 
@@ -125,10 +132,13 @@ Acesse a aplicação em `http://localhost:5173/`.
 A plataforma conta com suítes completas de testes de aceitação:
 
 ```bash
-# Executa os 24 testes da evolução recente (Seção 12)
+# Executa os 39 testes de aceitação da hierarquia, Vice-presidente e novos módulos
+npm run test:vice-president
+
+# Executa os 24 testes da evolução anterior (Seção 12)
 npm run test:evolution
 
-# Executa todas as 7 suítes de testes de aceitação do sistema
+# Executa todas as 8 suítes de testes de aceitação do sistema
 npm run test:all
 
 # Validação do build de produção e tipos TypeScript
@@ -141,13 +151,15 @@ npm run build
 
 | Perfil / Cargo | E-mail | Departamento | Permissões Principais |
 | :--- | :--- | :--- | :--- |
-| **Presidente (Admin)** | `presidente@gmail.com` | Projetos | Visão irrestrita global, filtro de departamentos, gestão de colaboradores, auditoria completa |
-| **Diretor de RH** | `rh@tecnosystem.com` | RH | Gestão e chamados do setor de RH, cadastro de usuários, auditoria setorial |
+| **Presidente** | `presidente@gmail.com` | Administração | Visão irrestrita global, filtro de departamentos, gestão de colaboradores, auditoria completa, fechamento contábil |
+| **Vice-presidente** | `vicepresidente@tecnosystem.com` | Administração & Projetos | Acesso executivo global irrestrito, liderança em Projetos, auditoria, módulo Pessoas e Financeiro |
+| **Diretor de RH** | `rh@tecnosystem.com` | RH | Gestão e chamados do setor de RH, cadastro de usuários, visualização de atividade (`people.view_activity`) |
+| **Diretor Financeiro** | `financeiro@tecnosystem.com` | Financeiro | Gestão financeira, lançamento de entradas/saídas, conciliação e fechamento contábil mensal |
 | **Diretor de Marketing** | `marketing@tecnosystem.com` | Marketing | Gestão e chamados do setor de Marketing, exclusão de chamados do setor, auditoria setorial |
 | **Diretor de Projetos** | `projetos@tecnosystem.com` | Projetos | Gestão de chamados de Projetos, exclusão de chamados do setor, auditoria setorial |
-| **Membro (Colaborador)** | `membro@tecnosystem.com` | Projetos | Abertura e acompanhamento de chamados do próprio setor; sem exclusão e sem auditoria |
+| **Membro (Colaborador)** | `mariana.souza@tecnosystem.com.br` | Projetos | Abertura e acompanhamento de chamados do próprio setor; sem exclusão e sem auditoria |
 
-*Senha inicial padrão: `Presidente@2026` para o Presidente e `Tecno@2026!` para os demais colaboradores.*
+*Senha inicial padrão: `Presidente@2026` para o Presidente e Vice-presidente; `Tecno@2026!` para os demais colaboradores.*
 
 ---
 

@@ -341,34 +341,55 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- RPC hr_responders_stats (SECURITY DEFINER)
+DROP FUNCTION IF EXISTS public.hr_responders_stats(int);
+
 CREATE OR REPLACE FUNCTION public.hr_responders_stats(period_days int DEFAULT 30)
-RETURNS jsonb AS $$
+RETURNS TABLE (
+  profile_id uuid,
+  name text,
+  email text,
+  department_name text,
+  role_name text,
+  assigned_count bigint,
+  comments_count bigint,
+  resolved_count bigint,
+  last_activity_at timestamptz,
+  responded_in_period boolean
+) AS $$
 DECLARE
   v_start timestamptz;
-  v_result jsonb;
 BEGIN
-  IF NOT public.has_department_permission(auth.uid(), 'people.view_activity') THEN
-    RAISE EXCEPTION 'Acesso negado: Você não possui a permissão people.view_activity.';
+  IF auth.uid() IS NOT NULL AND current_setting('role', true) <> 'service_role' THEN
+    IF NOT public.has_department_permission(auth.uid(), 'people.view_activity') THEN
+      RAISE EXCEPTION 'Acesso negado: Você não possui a permissão people.view_activity.';
+    END IF;
   END IF;
 
-  v_start := now() - (period_days || ' days')::interval;
+  v_start := now() - (coalesce(period_days, 30) || ' days')::interval;
 
+  RETURN QUERY
   WITH active_users AS (
-    SELECT p.id, p.name, coalesce(d.name, 'Geral') as department_name, r.name as role_name
+    SELECT 
+      p.id, 
+      p.name, 
+      p.email,
+      coalesce(d.name, 'Geral')::text as dept_name, 
+      r.name::text as r_name
     FROM public.profiles p
     JOIN public.roles r ON p.role_id = r.id
     LEFT JOIN public.departments d ON p.department_id = d.id
     WHERE p.is_active = true AND r.name <> 'Cliente'
   ),
-  user_activity AS (
+  user_counts AS (
     SELECT
-      u.id,
-      u.name,
-      u.department_name,
-      u.role_name,
-      (SELECT count(*) FROM public.tickets t WHERE t.assignee_id = u.id AND t.status NOT IN ('Resolvido', 'Fechado'))::int as open_assigned_tickets,
-      (SELECT count(*) FROM public.tickets t WHERE t.assignee_id = u.id AND t.status = 'Resolvido' AND t.resolved_at >= v_start)::int as resolved_in_period,
-      (SELECT count(*) FROM public.ticket_comments tc WHERE tc.author_id = u.id AND tc.created_at >= v_start)::int as comments_in_period,
+      u.id as u_id,
+      u.name as u_name,
+      u.email as u_email,
+      u.dept_name,
+      u.r_name,
+      (SELECT count(*) FROM public.tickets t WHERE t.assignee_id = u.id AND t.created_at >= v_start)::bigint as total_assigned,
+      (SELECT count(*) FROM public.ticket_comments tc WHERE tc.author_id = u.id AND tc.created_at >= v_start)::bigint as total_comments,
+      (SELECT count(*) FROM public.tickets t WHERE t.assignee_id = u.id AND t.status = 'Resolvido' AND t.resolved_at >= v_start)::bigint as total_resolved,
       (
         SELECT max(act_date)
         FROM (
@@ -376,25 +397,25 @@ BEGIN
           UNION ALL
           SELECT t.resolved_at as act_date FROM public.tickets t WHERE t.assignee_id = u.id AND t.resolved_at IS NOT NULL
         ) acts
-      ) as last_activity
+      ) as max_act
     FROM active_users u
-  ),
-  classified AS (
-    SELECT *,
-      (resolved_in_period > 0 OR comments_in_period > 0) as responded
-    FROM user_activity
   )
-  SELECT jsonb_build_object(
-    'period_days', period_days,
-    'total_active_staff', (SELECT count(*) FROM active_users),
-    'total_responders', (SELECT count(*) FROM classified WHERE responded = true),
-    'responders', (SELECT coalesce(jsonb_agg(row_to_json(r)), '[]'::jsonb) FROM (SELECT * FROM classified WHERE responded = true ORDER BY name) r),
-    'non_responders', (SELECT coalesce(jsonb_agg(row_to_json(nr)), '[]'::jsonb) FROM (SELECT * FROM classified WHERE responded = false ORDER BY name) nr)
-  ) INTO v_result;
-
-  RETURN v_result;
+  SELECT
+    uc.u_id as profile_id,
+    uc.u_name as name,
+    uc.u_email as email,
+    uc.dept_name as department_name,
+    uc.r_name as role_name,
+    uc.total_assigned as assigned_count,
+    uc.total_comments as comments_count,
+    uc.total_resolved as resolved_count,
+    uc.max_act as last_activity_at,
+    (uc.total_comments > 0 OR uc.total_resolved > 0) as responded_in_period
+  FROM user_counts uc
+  ORDER BY uc.u_name;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
 
 -- 8. Tabelas do Módulo Financeiro
 CREATE TABLE IF NOT EXISTS public.finance_months (

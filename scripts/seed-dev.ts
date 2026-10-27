@@ -181,7 +181,7 @@ async function main() {
         department_id: depId,
         role_id: roleId,
         is_active: true,
-        must_change_password: Boolean(userDef.isPresident || userDef.isVicePresident),
+        must_change_password: false,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' }

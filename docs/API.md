@@ -101,36 +101,51 @@ Atribui um atendente responsável e/ou redireciona o departamento de destino de 
 
 ---
 
-## 4. Storage Buckets & Políticas RLS
+### 2.3 `hr_responders_stats`
+Retorna métricas agregadas de produtividade e atividade dos colaboradores internos que atendem chamados, sem vazamento de corpo de chamados ou comentários sensíveis.
 
-### 4.1 Bucket `avatars` (Público para Leitura, Restrito para Escrita)
-- **Finalidade**: Armazenamento de fotos de perfil dos colaboradores.
-- **Configuração do Bucket**: `public: true`, `file_size_limit: 1048576` (1 MB).
-- **Formatos Permitidos**: `image/png`, `image/jpeg`, `image/webp`.
-- **Validação no Cliente**: Checagem de cabeçalho binário (*magic bytes*) antes do upload.
-- **Políticas de Acesso (RLS)**:
-  - **SELECT**: Acesso público (`bucket_id = 'avatars'`).
-  - **INSERT / UPDATE**: Restrito ao próprio usuário (`bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text`).
-  - **DELETE**: Apenas o titular do avatar pode remover sua foto.
-
-### 4.2 Bucket `ticket-attachments` (Privado com Signed URLs)
-- **Finalidade**: Anexos de chamados técnicos e arquivos de incidentes.
-- **Configuração do Bucket**: `public: false`, `file_size_limit: 1048576` (1 MB).
-- **Extensões Bloqueadas**: `.exe`, `.bat`, `.cmd`, `.sh`, `.msi`, `.bin`, `.dll`, `.com`, `.vbs`, `.js`, `.scr`.
-- **Download**: Exclusivamente via **Signed URLs** geradas pelo backend com expiração de 1 hora.
-- **Políticas de Acesso (RLS)**:
-  - Usuários só podem ler anexos de chamados aos quais possuem permissão de leitura pela tabela `tickets`.
+- **Nome no Banco**: `public.hr_responders_stats`
+- **Método HTTP**: `POST /rest/v1/rpc/hr_responders_stats`
+- **Permissão Exigida**: `people.view_activity` (ou privilégio executivo via `is_executive()`).
+- **Parâmetros**: `{ "period_days": 30 }` (default: 30 dias).
+- **Retorno**: Array de objetos contendo `profile_id`, `name`, `email`, `department_name`, `role_name`, `assigned_count`, `comments_count`, `resolved_count`, `last_activity_at`, `responded_in_period`.
 
 ---
 
-## 5. Permissões RBAC Registradas
+## 3. Storage Buckets & Políticas RLS
+
+### 3.1 Bucket `avatars` (Público para Leitura, Restrito para Escrita)
+- **Finalidade**: Armazenamento de fotos de perfil dos colaboradores.
+- **Configuração**: `public: true`, `file_size_limit: 1048576` (1 MB).
+- **Formatos Permitidos**: `image/png`, `image/jpeg`, `image/webp`.
+
+### 3.2 Bucket `ticket-attachments` (Privado com Signed URLs)
+- **Finalidade**: Anexos de chamados técnicos e arquivos de incidentes.
+- **Configuração**: `public: false`, `file_size_limit: 1048576` (1 MB).
+- **Download**: Exclusivamente via **Signed URLs** geradas pelo backend.
+
+### 3.3 Bucket `finance-files` (Privado com Signed URLs)
+- **Finalidade**: Comprovantes de receitas, despesas e contratos de projetos do módulo Financeiro.
+- **Configuração**: `public: false`, `file_size_limit: 1048576` (1 MB).
+- **Formatos Permitidos**: `application/pdf`, `image/png`, `image/jpeg`.
+- **Validação no Cliente**: Checagem rigorosa de magic bytes binários antes do upload.
+- **Permissão de Acesso**: Exclusivo para Diretor Financeiro, Presidente e Vice-presidente (`finance.view`).
+
+---
+
+## 4. Permissões Granulares Registradas
 
 | Permissão | Concedida a | Descrição |
 | :--- | :--- | :--- |
-| `audit.view` | Presidente, Diretores | Permite visualizar a trilha de auditoria e logs de segurança. |
-| `ticket.assign` | Presidente, Diretores | Permite alterar o responsável atribuído e redirecionar chamado de setor. |
-| `profile.change_department` | Presidente | Permite modificar o departamento de qualquer colaborador. |
-| `ticket.view_all` | Presidente | Visão irrestrita global de todos os chamados da empresa júnior. |
-| `user.manage` | Presidente, Diretor de RH | Cadastro e inativação de contas de colaboradores. |
-| `ticket.delete` | Presidente, Diretores | Exclusão definitiva de chamados. |
-| `ticket.view_own` | Clientes | Acesso estrito exclusivamente aos chamados de sua própria autoria. |
+| `people.view` | Presidente, Vice-presidente, RH | Visualizar módulo de pessoas e colaboradores internos. |
+| `people.manage_members` | Presidente, Vice-presidente, Diretor de RH | Cadastrar, editar e inativar colaboradores. |
+| `people.view_activity` | Presidente, Vice-presidente, Diretor de RH | Consultar métricas agregadas via RPC `hr_responders_stats`. |
+| `people.send_alerts` | Presidente, Vice-presidente, Diretor de RH | Disparar alertas de inatividade para atendentes. |
+| `finance.view` | Presidente, Vice-presidente, Financeiro | Visualizar lançamentos, projetos e resumos contábeis. |
+| `finance.manage_entries` | Presidente, Vice-presidente, Diretor Financeiro | Criar, editar e excluir receitas e despesas. |
+| `finance.manage_projects` | Presidente, Vice-presidente, Diretor Financeiro | Vincular comprovantes e projetos a competências. |
+| `finance.close_month` | Presidente, Vice-presidente, Diretor Financeiro | Encerrar mês contábil tornando-o somente leitura. |
+| `finance.reopen_month` | Presidente, Vice-presidente | Reabrir competência contábil com registro de auditoria. |
+| `audit.view` | Presidente, Vice-presidente, Diretores | Permite visualizar a trilha de auditoria e logs de segurança. |
+| `ticket.assign` | Presidente, Vice-presidente, Diretores | Atribuir responsáveis e redirecionar chamados de setor. |
+| `ticket.delete` | Presidente, Vice-presidente, Diretores | Exclusão definitiva de chamados. |

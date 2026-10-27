@@ -22,8 +22,8 @@ O sistema é estruturado como uma **Single-Page Application (SPA) reativa e prog
 graph TD
     App["App (Root Orchestrator)"]
     AuthGuard["AuthScreen (Auth Guard)"]
-    Sidebar["Sidebar (Slide Drawer - 10 Itens)"]
-    Header["Header (Notificações Realtime & CTA)"]
+    Sidebar["Sidebar (Slide Drawer - 13 Itens)"]
+    Header["Header (Avatar 40px, Dropdown & Mobile CTA)"]
 
     App --> AuthGuard
     App --> Sidebar
@@ -33,7 +33,10 @@ graph TD
         Overview["OverviewView (Visão Geral das Solicitações)"]
         Unified["UnifiedTicketsView (Chamados: Lista | Kanban)"]
         MyTickets["MyTicketsView (Meus Chamados: Atribuídos / Abertos)"]
+        Notif["NotificationsView (Central de Notificações)"]
         Executive["ExecutiveDashboardView (Painel Executivo & Métricas)"]
+        People["PeopleView (Módulo de Pessoas - RH)"]
+        Finance["FinanceView (Módulo Financeiro)"]
         Workspace["PersonalWorkspaceView (Espaço Privado)"]
         Calendar["CalendarView (Calendário Corporativo)"]
         Audit["AuditView (Trilha de Auditoria & 403 Guard)"]
@@ -43,7 +46,10 @@ graph TD
     App --> Overview
     App --> Unified
     App --> MyTickets
+    App --> Notif
     App --> Executive
+    App --> People
+    App --> Finance
     App --> Workspace
     App --> Calendar
     App --> Audit
@@ -66,52 +72,49 @@ graph TD
 
 ## 3. Modelo de Dados e Migrations
 
-A evolução introduziu a migration `20261027000005_update_departments_and_sidebar_rbac.sql` com as seguintes definições:
+### 3.1 Migration `20261027000006_vice_president_departments_and_permissions.sql`
+A evolução introduziu suporte à liderança executiva e aos módulos de gestão:
 
-### 3.1 Departamentos Oficiais
-A tabela `departments` opera exclusivamente com os 4 códigos oficiais:
-- `FIN` (Financeiro)
-- `RH` (Recursos Humanos)
-- `MKT` (Marketing)
-- `PRJ` (Projetos)
-
-### 3.2 Novas Permissões RBAC na Tabela `roles`
-- `audit.view`: Concedida a **Presidente** e **Diretor** (controla visualização de histórico e logs).
-- `ticket.assign`: Concedida a **Presidente** e **Diretor** (controla a atribuição de responsáveis).
-- `profile.change_department`: Concedida exclusivamente ao **Presidente**.
-
-### 3.3 Trigger de Proteção de Departamento (`trg_check_profile_department_change`)
-```sql
-CREATE OR REPLACE FUNCTION check_profile_department_change()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.department_id IS DISTINCT FROM OLD.department_id THEN
-    IF NOT is_president(auth.uid()) THEN
-      RAISE EXCEPTION 'Apenas o Presidente possui permissão para alterar o departamento de um colaborador.';
-    END IF;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-```
-
-### 3.4 Bucket `avatars` no Supabase Storage
-- Bucket público para leitura de fotos de perfil (`public = true`).
-- Políticas RLS vinculadas a `{user_id}/*`, permitindo que cada usuário envie e altere apenas o seu próprio avatar.
+1. **Departamento Executivo (`Administração`)**:
+   - `departments.is_executive_department = true` para Administração.
+   - O Presidente e o Vice-presidente pertencem a este departamento.
+2. **Cargo `Vice-presidente`**:
+   - Ordem hierárquica oficial: Presidente > Vice-presidente > Diretor > Membro.
+   - Funções auxiliares PostgreSQL: `is_executive(user_id)` concede privilégios executivos irrestritos a Presidente e Vice-presidente.
+   - Subtítulo oficial: `"Vice-presidente · Administração e Diretor de [Departamento]"`.
+3. **Múltiplos Departamentos (`department_memberships`)**:
+   - Tabela associativa `department_memberships (user_id, department_id, is_director, joined_at)`.
+   - Função `user_department_ids(user_id)` utilizada em políticas RLS para permitir que membros visualizem chamados de todos os seus setores associados.
+4. **Trigger de Proteção do Presidente Ativo (`trg_ensure_active_president`)**:
+   - Impede `UPDATE` (`is_active = false`) ou `DELETE` se restar apenas 1 Presidente ativo no sistema, lançando exceção explícita.
+5. **Permissões Granulares (`department_role_permissions`)**:
+   - Matriz para permissões `people.*` (`people.view`, `people.manage_members`, `people.view_activity`, `people.send_alerts`) e `finance.*` (`finance.view`, `finance.manage_entries`, `finance.manage_projects`, `finance.close_month`, `finance.reopen_month`).
+6. **Módulo Financeiro (Estrutura Contábil)**:
+   - Tabelas: `finance_months`, `finance_entries`, `finance_month_projects`, `finance_attachments`.
+   - Valores monetários rigorosamente em centavos inteiros (`bigint`) para precisão absoluta.
+   - View `vw_finance_monthly_summary` para agregação de receitas, despesas e saldo líquido.
+   - Bucket `finance-files` com limite de 1 MB e verificação binária de magic bytes.
+7. **RPC Segura de Atividade de Atendentes (`hr_responders_stats`)**:
+   - Retorna exclusivamente dados quantitativos e timestamps agregados de atendimento (`assigned_count`, `comments_count`, `resolved_count`, `last_activity_at`, `responded_in_period`).
+   - Não expõe corpo do chamado ou comentários sensíveis de outros setores.
 
 ---
 
 ## 4. Matriz de Acesso e Permissões (RBAC)
 
-| Recurso / Ação | Membro | Diretor | Presidente | Cliente |
+| Recurso / Ação | Membro | Diretor | Vice-presidente | Presidente |
 | :--- | :---: | :---: | :---: | :---: |
-| **Visão Geral das Solicitações** | Apenas Setor | Apenas Setor | Global (Todos) | Bloqueado |
-| **Chamados (Lista / Kanban)** | Apenas Setor | Apenas Setor | Global (Todos) | Apenas Próprios |
-| **Filtro de Departamento** | Oculto | Oculto | **Exclusivo** | Oculto |
+| **Visão Geral das Solicitações** | Setor(es) | Setor(es) | Global (Irrestrita) | Global (Irrestrita) |
+| **Chamados (Lista / Kanban)** | Setor(es) | Setor(es) | Global (Todos) | Global (Todos) |
+| **Filtro Global de Departamento** | Oculto | Oculto | **Acesso Executivo** | **Acesso Executivo** |
 | **Meus Chamados** | Sim | Sim | Sim | Sim |
-| **Painel Executivo & Métricas** | Apenas Setor | Apenas Setor | Global (Filtro Ativo) | Bloqueado |
-| **Auditoria (`audit.view`)** | **403 Bloqueado** | Apenas Setor | Global Completa | **403 Bloqueado** |
-| **Exclusão de Chamados** | Não | Sim (Setor) | Sim (Global) | Não |
-| **Atribuição de Responsável** | Não | Sim | Sim | Não |
-| **Alteração de Departamento** | Bloqueado por Trigger | Bloqueado por Trigger | **Permitido** | Bloqueado por Trigger |
-| **Upload de Anexos no Ticket** | Sim (Max 1MB, 5 arquivos) | Sim | Sim | Sim |
+| **Notificações In-App** | Sim | Sim | Sim | Sim |
+| **Painel Executivo & Gráficos Financeiros** | Oculto | Oculto | **Acesso Executivo** | **Acesso Executivo** |
+| **Pessoas (`people.*`)** | Bloqueado | RH Apenas | **Acesso Executivo** | **Acesso Executivo** |
+| **Financeiro (`finance.*`)** | Bloqueado | Financeiro Apenas | **Acesso Executivo** | **Acesso Executivo** |
+| **Auditoria (`audit.view`)** | **403 Bloqueado** | Setor Apenas | Global Completa | Global Completa |
+| **Exclusão de Chamados** | Não | Sim (Setor) | Sim (Global) | Sim (Global) |
+| **Atribuição de Responsável** | Não | Sim | Sim | Sim |
+| **Upload de Anexos no Ticket** | Sim (1MB, 5 arqs) | Sim | Sim | Sim |
+| **Fechamento de Mês Contábil** | Não | Financeiro | Sim | Sim |
+

@@ -305,7 +305,7 @@ export function AuthScreen({
                     <button
                       type="button"
                       id="quick-login-vp"
-                      onClick={() => handleQuickSeed('vicepresidente@tecnosystem.com', 'Tecno@2026!')}
+                      onClick={() => handleQuickSeed('vicepresidente@tecnosystem.com', 'Presidente@2026')}
                       className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50/80 p-2 text-center transition hover:bg-indigo-100 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 cursor-pointer"
                     >
                       <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200">Vice-pres.</span>

@@ -33,12 +33,17 @@ export function mapDatabaseProfileToUserProfile(
     roles?: { name: string; permissions: string[] } | null;
   }
 ): UserProfile {
+  const roleName = profile.roles?.name || 'Membro';
+  const isExec = roleName.toLowerCase().includes('presidente');
+  const isVp = roleName.toLowerCase().includes('vice');
   return {
     id: profile.id,
     name: profile.name,
     email: profile.email,
-    department: (profile.departments?.code as Department) || 'Projetos',
-    role: profile.roles?.name || 'Membro',
+    department: (profile.departments?.code as Department) || (isExec ? 'Administração' : 'Projetos'),
+    secondaryDepartment: isVp ? 'Projetos' : undefined,
+    role: roleName,
+    isExecutive: isExec,
     avatarUrl: profile.avatar_url,
     theme: (profile.theme as any) || 'system',
     createdAt: profile.created_at,
@@ -78,7 +83,7 @@ export async function signIn(email: string, pass: string): Promise<AuthProfileRe
       is_active,
       must_change_password,
       created_at,
-      departments ( code, name ),
+      departments!profiles_department_id_fkey ( code, name ),
       roles ( name, permissions )
     `)
     .eq('id', authData.user.id)
@@ -124,7 +129,7 @@ export async function getCurrentUserProfile(): Promise<UserProfile | null> {
       is_active,
       must_change_password,
       created_at,
-      departments ( code, name ),
+      departments!profiles_department_id_fkey ( code, name ),
       roles ( name, permissions )
     `)
     .eq('id', userId)
@@ -219,7 +224,7 @@ export async function listAllUsers(): Promise<UserProfile[]> {
       is_active,
       must_change_password,
       created_at,
-      departments ( code, name ),
+      departments!profiles_department_id_fkey ( code, name ),
       roles ( name, permissions )
     `)
     .order('name');
