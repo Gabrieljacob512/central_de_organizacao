@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 135" fill="none">
+  <defs>
+    <linearGradient id="ts-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e11d48" />
+      <stop offset="50%" stop-color="#dc2626" />
+      <stop offset="100%" stop-color="#991b1b" />
+    </linearGradient>
+    <linearGradient id="ts-dark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#881337" />
+      <stop offset="100%" stop-color="#4c0519" />
+    </linearGradient>
+  </defs>
+  <!-- Hexagon with rounded corners -->
+  <path d="M60 6 L112 36 L112 94 L60 124 L8 94 L8 36 Z" fill="url(#ts-grad)" stroke="#b91c1c" stroke-width="2" stroke-linejoin="round" />
+  <!-- Shadow / facet shape -->
+  <path d="M60 6 L112 36 L112 94 L60 124 Z" fill="black" fill-opacity="0.15" />
+  <!-- White Ribbon S -->
+  <path d="M38 42 L72 26 L86 46 L52 62 Z" fill="#ffffff" />
+  <path d="M82 84 L48 100 L34 80 L68 64 Z" fill="#ffffff" />
+  <!-- Curved central fold -->
+  <path d="M48 42 C56 42 74 52 74 66 C74 78 58 86 48 94 C44 86 42 76 46 64 C48 56 44 48 38 42 Z" fill="url(#ts-dark)" />
+</svg>
