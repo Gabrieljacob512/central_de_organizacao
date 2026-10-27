@@ -1,6 +1,9 @@
 import { Building2, Lock, UserCheck } from 'lucide-react';
+
+import { useEffect, useState } from 'react';
 import { AGENTS_BY_DEPARTMENT, CATEGORIES_BY_DEPARTMENT, DEPARTMENTS, PRIORITIES, SLA_HOURS } from '../../constants/config';
 import { PRIORITY_STYLES } from '../../constants/styles';
+import { fetchProjects, type Project } from '../../services/differentiatorsService';
 import type { Department, Priority, TicketFormData, TicketFormErrors } from '../../types/ticket';
 import { FIELD_LIMITS } from '../../utils/validation';
 import { FormField } from '../ui/FormField';
@@ -16,7 +19,14 @@ interface TicketFieldsProps {
 
 /** Conjunto de campos do chamado, compartilhado entre criação e edição. */
 export function TicketFields({ idPrefix, value, errors, onChange, isCreateMode = false }: TicketFieldsProps) {
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  useEffect(() => {
+    fetchProjects().then(setProjects);
+  }, []);
+
   const fieldId = (name: keyof TicketFormData) => `${idPrefix}-${name}`;
+
   const aria = (name: keyof TicketFormData) => ({
     'aria-invalid': Boolean(errors[name]),
     'aria-describedby': errors[name] ? `${fieldId(name)}-error` : undefined,
@@ -237,7 +247,32 @@ export function TicketFields({ idPrefix, value, errors, onChange, isCreateMode =
         </select>
       </FormField>
 
+      {/* Projeto Associado da Empresa Júnior */}
       <FormField
+        label="Projeto Associado (Opcional)"
+        htmlFor={fieldId('projectId')}
+        hint="Vincule esta demanda a um projeto ou consultoria da Empresa Júnior."
+        className="sm:col-span-2"
+      >
+        <div className="relative">
+          <select
+            id={fieldId('projectId')}
+            value={value.projectId || ''}
+            onChange={(event) => onChange({ projectId: event.target.value || undefined })}
+            className={`${inputClass()} cursor-pointer`}
+          >
+            <option value="">Nenhum projeto específico (Demanda interna geral)</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                [{project.code}] {project.name} — Cliente: {project.client_name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </FormField>
+
+      <FormField
+
         label="Descrição detalhada"
         htmlFor={fieldId('description')}
         required

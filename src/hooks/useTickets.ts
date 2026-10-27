@@ -39,7 +39,9 @@ const FIELD_LABELS: Record<keyof TicketFormData, string> = {
   priority: 'Prioridade',
   description: 'Descrição',
   assignee: 'Responsável',
+  projectId: 'Projeto Associado',
 };
+
 
 type EditableFields = Pick<
   Ticket,

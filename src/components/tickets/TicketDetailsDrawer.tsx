@@ -11,6 +11,8 @@ import { Avatar } from '../ui/Avatar';
 import { PriorityBadge, StatusBadge } from '../ui/Badges';
 import { inputClass } from '../ui/formStyles';
 import { SlaIndicator } from '../ui/SlaIndicator';
+import { CsatRatingWidget } from './CsatRatingWidget';
+import { ReopenTicketModal } from './ReopenTicketModal';
 import { TicketFields } from './TicketFields';
 import { TicketHistory } from './TicketHistory';
 
@@ -65,6 +67,7 @@ function DrawerContent({
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<TicketFormData>(() => toFormData(ticket));
   const [errors, setErrors] = useState<TicketFormErrors>({});
+  const [reopenModalOpen, setReopenModalOpen] = useState(false);
 
   useBodyScrollLock(true);
   useEscapeKey(() => (editing ? setEditing(false) : onClose()), !escapeDisabled);
@@ -161,6 +164,18 @@ function DrawerContent({
                 {transition.label}
               </button>
             ))}
+
+            {(ticket.status === 'Resolvido' || ticket.status === 'Fechado') && (
+              <button
+                id="reopen-ticket-btn"
+                type="button"
+                onClick={() => setReopenModalOpen(true)}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reabrir Chamado (7 dias)
+              </button>
+            )}
           </div>
           {ticket.status === 'Aberto' && !ticket.assignee && (
             <p className="mt-2.5 flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
@@ -231,6 +246,11 @@ function DrawerContent({
               ) : (
                 <div className="animate-fade-in space-y-5">
                   <SlaIndicator ticket={ticket} now={now} variant="full" />
+
+                  {/* Avaliação CSAT quando o chamado for Resolvido ou Fechado */}
+                  {(ticket.status === 'Resolvido' || ticket.status === 'Fechado') && (
+                    <CsatRatingWidget ticketId={ticket.id} />
+                  )}
 
                   {/* Atribuição de Departamento e Atendente */}
                   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3 dark:border-slate-800 dark:bg-slate-850">
@@ -353,6 +373,16 @@ function DrawerContent({
           )}
         </footer>
       </aside>
+
+      {/* Modal de Reabertura Controlada (7 dias) */}
+      <ReopenTicketModal
+        open={reopenModalOpen}
+        ticketId={ticket.id}
+        onClose={() => setReopenModalOpen(false)}
+        onSuccess={() => {
+          onChangeStatus(ticket.id, 'Em Andamento');
+        }}
+      />
     </div>
   );
 }

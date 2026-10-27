@@ -154,9 +154,10 @@ async function runPhase4Tests() {
       notify_status_change: false,
       notify_sla_warning: true,
       notify_sla_breached: true,
-    });
+    }, { onConflict: 'user_id' });
 
   assert(!prefUpsertErr, 'Atualização de preferências de notificação do usuário', prefUpsertErr?.message);
+
 
   const { data: savedPrefs } = await presClient
     .from('notification_preferences')

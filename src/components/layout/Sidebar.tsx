@@ -1,12 +1,15 @@
 import {
+  BookOpen,
   Calendar,
   Columns3,
+  Download,
   History,
   KeyRound,
   Lock,
   LogOut,
   RotateCcw,
   Rows3,
+  ShieldCheck,
   Users,
   X,
 } from 'lucide-react';
@@ -25,8 +28,12 @@ interface SidebarProps {
   onResetData: () => void;
   onOpenChangePassword: () => void;
   onOpenUserManagement?: () => void;
+  onOpenKnowledgeBase?: () => void;
+  onExportCalendarIcs?: () => void;
+  onOpenLgpdModal?: () => void;
   onLogout: () => void;
 }
+
 
 /**
  * Menu Lateral Expansível (Slide Drawer) com Seção de Configurações (Requisito 4).
@@ -46,10 +53,14 @@ export function Sidebar({
   onResetData,
   onOpenChangePassword,
   onOpenUserManagement,
+  onOpenKnowledgeBase,
+  onExportCalendarIcs,
+  onOpenLgpdModal,
   onLogout,
 }: SidebarProps) {
   const roleBadge = getUserRoleBadgeInfo(currentUser);
   const hasUserManagementAccess = canManageUsers(currentUser);
+
 
   return (
     <div
@@ -222,6 +233,38 @@ export function Sidebar({
               <span>Espaço Privado</span>
             </button>
 
+            {/* Base de Conhecimento & FAQs */}
+            {onOpenKnowledgeBase && (
+              <button
+                id="nav-knowledge-base"
+                type="button"
+                onClick={() => {
+                  onOpenKnowledgeBase();
+                  onClose();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span>Base de Conhecimento</span>
+              </button>
+            )}
+
+            {/* Exportar Calendário .ICS */}
+            {onExportCalendarIcs && (
+              <button
+                id="nav-export-ics"
+                type="button"
+                onClick={() => {
+                  onExportCalendarIcs();
+                  onClose();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Exportar Calendário (.ICS)</span>
+              </button>
+            )}
+
             {/* Gestão de Colaboradores (Exclusivo para Presidente e Diretor de RH) */}
             {hasUserManagementAccess && onOpenUserManagement && (
               <button
@@ -291,6 +334,22 @@ export function Sidebar({
               <span>Mudar Minha Senha</span>
             </button>
 
+            {/* Privacidade & LGPD */}
+            {onOpenLgpdModal && (
+              <button
+                id="btn-lgpd-sidebar"
+                type="button"
+                onClick={() => {
+                  onOpenLgpdModal();
+                  onClose();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-2.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:hover:border-slate-750 dark:hover:bg-slate-800 dark:hover:text-white cursor-pointer"
+              >
+                <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <span>Privacidade & LGPD</span>
+              </button>
+            )}
+
             {/* Modo Claro / Modo Escuro */}
             <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-850">
               <div className="mb-2 flex items-center justify-between px-1">
@@ -301,6 +360,7 @@ export function Sidebar({
               <ThemeToggle variant="full" />
             </div>
           </div>
+
         </div>
 
         {/* Rodapé: Botão "Sair da Conta" (Logout) */}

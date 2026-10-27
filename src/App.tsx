@@ -15,9 +15,13 @@ import { TicketTable } from './components/tickets/TicketTable';
 import { Toolbar } from './components/tickets/Toolbar';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { EmptyState } from './components/ui/EmptyState';
+import { KnowledgeBaseModal } from './components/knowledge/KnowledgeBaseModal';
+import { LgpdModal } from './components/lgpd/LgpdModal';
 import { NotificationPreferencesModal } from './components/notifications/NotificationPreferencesModal';
 import { UserManagementModal } from './components/users/UserManagementModal';
 import { PersonalWorkspaceView } from './components/workspace/PersonalWorkspaceView';
+import { exportCalendarToIcs } from './services/differentiatorsService';
+
 import { useAuditLogs } from './hooks/useAuditLogs';
 import { useCalendarEvents } from './hooks/useCalendarEvents';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -97,6 +101,8 @@ export default function App() {
   const [resetOpen, setResetOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifPreferencesOpen, setNotifPreferencesOpen] = useState(false);
+  const [kbModalOpen, setKbModalOpen] = useState(false);
+  const [lgpdModalOpen, setLgpdModalOpen] = useState(false);
 
   // 5. Espaço Privado e Calendário do Usuário (Requisitos 1, 2 e 3)
   const {
@@ -252,6 +258,12 @@ export default function App() {
         onResetData={() => setResetOpen(true)}
         onOpenChangePassword={() => setChangePasswordOpen(true)}
         onOpenUserManagement={() => setUserManagementOpen(true)}
+        onOpenKnowledgeBase={() => setKbModalOpen(true)}
+        onExportCalendarIcs={() => {
+          exportCalendarToIcs(allEvents);
+          toast.success('Calendário Exportado', 'O arquivo .ics foi gerado com sucesso.');
+        }}
+        onOpenLgpdModal={() => setLgpdModalOpen(true)}
         onLogout={logout}
       />
 
@@ -565,6 +577,21 @@ export default function App() {
         open={notifPreferencesOpen}
         onClose={() => setNotifPreferencesOpen(false)}
       />
+
+      {/* Modal da Base de Conhecimento (Fase 6) */}
+      <KnowledgeBaseModal
+        open={kbModalOpen}
+        onClose={() => setKbModalOpen(false)}
+      />
+
+      {/* Modal de Privacidade e Anonimização LGPD (Fase 6) */}
+      <LgpdModal
+        open={lgpdModalOpen}
+        currentUser={currentUser}
+        onClose={() => setLgpdModalOpen(false)}
+        onLoggedOut={logout}
+      />
     </div>
   );
 }
+

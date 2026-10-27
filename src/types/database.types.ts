@@ -115,6 +115,26 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"knowledge_base_articles": {
+                  Row: {
+                    "category": string,"content": string,"created_at": string,"department_id": string | null,"id": string,"tags": (string)[],"title": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "category": string,"content": string,"created_at"?: string,"department_id"?: string | null,"id"?: string,"tags"?: (string)[],"title": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "category"?: string,"content"?: string,"created_at"?: string,"department_id"?: string | null,"id"?: string,"tags"?: (string)[],"title"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "knowledge_base_articles_department_id_fkey"
+      columns: ["department_id"]
+isOneToOne: false
+      referencedRelation: "departments"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"notification_preferences": {
                   Row: {
                     "email_enabled": boolean,"id": string,"in_app_enabled": boolean,"notify_mention": boolean,"notify_new_comment": boolean,"notify_sla_breached": boolean,"notify_sla_warning": boolean,"notify_status_change": boolean,"notify_ticket_assigned": boolean,"updated_at": string,"user_id": string
@@ -137,17 +157,23 @@ isOneToOne: true
                   ]
                 },"notifications": {
                   Row: {
-                    "created_at": string,"id": string,"link": string | null,"message": string,"read": boolean,"title": string,"type": string,"user_id": string
+                    "created_at": string,"id": string,"link": string | null,"message": string,"read": boolean,"sender_id": string | null,"title": string,"type": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id"?: string,"link"?: string | null,"message": string,"read"?: boolean,"title": string,"type": string,"user_id": string
+                    "created_at"?: string,"id"?: string,"link"?: string | null,"message": string,"read"?: boolean,"sender_id"?: string | null,"title": string,"type": string,"user_id": string
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"link"?: string | null,"message"?: string,"read"?: boolean,"title"?: string,"type"?: string,"user_id"?: string
+                    "created_at"?: string,"id"?: string,"link"?: string | null,"message"?: string,"read"?: boolean,"sender_id"?: string | null,"title"?: string,"type"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
+      foreignKeyName: "notifications_sender_id_fkey"
+      columns: ["sender_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "notifications_user_id_fkey"
       columns: ["user_id"]
 isOneToOne: false
@@ -198,6 +224,26 @@ isOneToOne: false
       columns: ["role_id"]
 isOneToOne: false
       referencedRelation: "roles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"projects": {
+                  Row: {
+                    "client_name": string,"code": string,"created_at": string,"department_id": string | null,"id": string,"name": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "client_name": string,"code": string,"created_at"?: string,"department_id"?: string | null,"id"?: string,"name": string
+                  }
+                  Update: {
+                    "client_name"?: string,"code"?: string,"created_at"?: string,"department_id"?: string | null,"id"?: string,"name"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "projects_department_id_fkey"
+      columns: ["department_id"]
+isOneToOne: false
+      referencedRelation: "departments"
       referencedColumns: ["id"]
     }
                   ]
@@ -257,14 +303,14 @@ isOneToOne: false
                   ]
                 },"tickets": {
                   Row: {
-                    "assigned_department_id": string | null,"assignee_id": string | null,"category": string,"closed_at": string | null,"created_at": string,"department_id": string,"description": string,"id": string,"paused_at": string | null,"priority": string,"requester_email": string,"requester_id": string | null,"requester_name": string,"resolved_at": string | null,"sla_due_at": string,"status": string,"title": string,"total_paused_seconds": number,"updated_at": string
+                    "assigned_department_id": string | null,"assignee_id": string | null,"category": string,"closed_at": string | null,"created_at": string,"csat_comment": string | null,"csat_rated_at": string | null,"csat_rating": number | null,"department_id": string,"description": string,"id": string,"paused_at": string | null,"priority": string,"project_id": string | null,"requester_email": string,"requester_id": string | null,"requester_name": string,"resolved_at": string | null,"sla_due_at": string,"status": string,"title": string,"total_paused_seconds": number,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "assigned_department_id"?: string | null,"assignee_id"?: string | null,"category": string,"closed_at"?: string | null,"created_at"?: string,"department_id": string,"description"?: string,"id"?: string,"paused_at"?: string | null,"priority": string,"requester_email": string,"requester_id"?: string | null,"requester_name": string,"resolved_at"?: string | null,"sla_due_at": string,"status"?: string,"title": string,"total_paused_seconds"?: number,"updated_at"?: string
+                    "assigned_department_id"?: string | null,"assignee_id"?: string | null,"category": string,"closed_at"?: string | null,"created_at"?: string,"csat_comment"?: string | null,"csat_rated_at"?: string | null,"csat_rating"?: number | null,"department_id": string,"description"?: string,"id"?: string,"paused_at"?: string | null,"priority": string,"project_id"?: string | null,"requester_email": string,"requester_id"?: string | null,"requester_name": string,"resolved_at"?: string | null,"sla_due_at": string,"status"?: string,"title": string,"total_paused_seconds"?: number,"updated_at"?: string
                   }
                   Update: {
-                    "assigned_department_id"?: string | null,"assignee_id"?: string | null,"category"?: string,"closed_at"?: string | null,"created_at"?: string,"department_id"?: string,"description"?: string,"id"?: string,"paused_at"?: string | null,"priority"?: string,"requester_email"?: string,"requester_id"?: string | null,"requester_name"?: string,"resolved_at"?: string | null,"sla_due_at"?: string,"status"?: string,"title"?: string,"total_paused_seconds"?: number,"updated_at"?: string
+                    "assigned_department_id"?: string | null,"assignee_id"?: string | null,"category"?: string,"closed_at"?: string | null,"created_at"?: string,"csat_comment"?: string | null,"csat_rated_at"?: string | null,"csat_rating"?: number | null,"department_id"?: string,"description"?: string,"id"?: string,"paused_at"?: string | null,"priority"?: string,"project_id"?: string | null,"requester_email"?: string,"requester_id"?: string | null,"requester_name"?: string,"resolved_at"?: string | null,"sla_due_at"?: string,"status"?: string,"title"?: string,"total_paused_seconds"?: number,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -292,6 +338,12 @@ isOneToOne: false
       referencedRelation: "sla_policies"
       referencedColumns: ["priority"]
     },{
+      foreignKeyName: "tickets_project_id_fkey"
+      columns: ["project_id"]
+isOneToOne: false
+      referencedRelation: "projects"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "tickets_requester_id_fkey"
       columns: ["requester_id"]
 isOneToOne: false
@@ -305,7 +357,10 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "assign_ticket_atomic":
+            "anonymize_user_data":
+{ Args: { "p_user_id": string }; Returns: Json
+                           },
+"assign_ticket_atomic":
 { Args: { "p_assigned_department_id"?: string,"p_assignee_id"?: string,"p_ticket_id": string }; Returns: Json
                            },
 "calculate_sla_due_at":
@@ -335,6 +390,12 @@ isOneToOne: false
       } },
 "has_permission":
 { Args: { "p_permission": string }; Returns: boolean
+                           },
+"reopen_ticket":
+{ Args: { "p_reason": string,"p_ticket_id": string }; Returns: Json
+                           },
+"submit_csat_feedback":
+{ Args: { "p_comment"?: string,"p_rating": number,"p_ticket_id": string }; Returns: Json
                            },
 "transition_ticket_status":
 { Args: { "p_new_status": string,"p_ticket_id": string }; Returns: Json

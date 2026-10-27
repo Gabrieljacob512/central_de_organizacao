@@ -110,6 +110,8 @@ export interface Ticket {
   slaDueAt: string;
   /** Momento em que o chamado foi resolvido/fechado (null se ativo). */
   resolvedAt: string | null;
+  projectId?: string | null;
+  csatRating?: number | null;
   history: TicketEvent[];
 }
 
@@ -124,7 +126,9 @@ export interface TicketFormData {
   priority: Priority;
   description: string;
   assignee: string;
+  projectId?: string;
 }
+
 
 export type TicketFormErrors = Partial<Record<keyof TicketFormData, string>>;
 

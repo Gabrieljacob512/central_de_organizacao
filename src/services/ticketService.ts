@@ -49,6 +49,8 @@ export async function fetchTickets(): Promise<Ticket[]> {
       requester_name,
       requester_email,
       assignee_id,
+      project_id,
+      csat_rating,
       sla_due_at,
       resolved_at,
       created_at,
@@ -109,6 +111,8 @@ export async function fetchTickets(): Promise<Ticket[]> {
       description: t.description,
       status: t.status as Status,
       assignee: assigneeName,
+      projectId: (t as any).project_id || null,
+      csatRating: (t as any).csat_rating || null,
       createdAt: t.created_at,
       updatedAt: t.updated_at,
       slaDueAt: t.sla_due_at,
@@ -173,6 +177,7 @@ export async function createTicket(formData: TicketFormData): Promise<{ success:
       requester_name: data.requester,
       requester_email: data.email,
       assignee_id: assigneeId,
+      project_id: formData.projectId || null,
       sla_due_at: computeSlaDueAt(new Date().toISOString(), data.priority),
     })
     .select()
