@@ -32,6 +32,7 @@ import { validateTransition } from '../utils/workflow';
 const FIELD_LABELS: Record<keyof TicketFormData, string> = {
   title: 'Título',
   requester: 'Solicitante',
+  requesterId: 'ID do Solicitante',
   email: 'E-mail',
   department: 'Departamento de Origem',
   assignedDepartment: 'Departamento Responsável',
@@ -39,7 +40,9 @@ const FIELD_LABELS: Record<keyof TicketFormData, string> = {
   priority: 'Prioridade',
   description: 'Descrição',
   assignee: 'Responsável',
+  assigneeId: 'ID do Responsável',
   projectId: 'Projeto Associado',
+  initialAttachments: 'Anexos Iniciais',
 };
 
 

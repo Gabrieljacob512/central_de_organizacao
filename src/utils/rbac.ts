@@ -59,6 +59,46 @@ export function canDeleteTicket(user: UserProfile | null | undefined): boolean {
 }
 
 /**
+ * Permissão audit.view: Concedida a Presidente e Diretor.
+ * Controla: item Auditoria da sidebar, aba Histórico/Eventos do detalhe do chamado e endpoints de log.
+ * Membro NÃO tem permissão.
+ */
+export function canViewAudit(user: UserProfile | null | undefined): boolean {
+  if (!user) return false;
+  if (user.permissions?.includes('audit.view') || user.permissions?.includes('audit.view_all')) return true;
+  const role = (user.role || '').toLowerCase();
+  return isPresident(user) || role.includes('diretor');
+}
+
+/**
+ * Permissão profile.change_department: Por padrão, APENAS o Presidente.
+ */
+export function canChangeDepartment(user: UserProfile | null | undefined): boolean {
+  if (!user) return false;
+  if (user.permissions?.includes('profile.change_department')) return true;
+  return isPresident(user);
+}
+
+/**
+ * Permissão ticket.assign: Quem atribui responsável ao chamado.
+ * Por padrão, Presidente e Diretor.
+ */
+export function canAssignTicket(user: UserProfile | null | undefined): boolean {
+  if (!user) return false;
+  if (user.permissions?.includes('ticket.assign')) return true;
+  const role = (user.role || '').toLowerCase();
+  return isPresident(user) || role.includes('diretor');
+}
+
+/**
+ * Filtro por departamento: EXCLUSIVO do Presidente.
+ * Membros e Diretores têm seus dados restritos automaticamente pelo banco/servidor.
+ */
+export function canUseDepartmentFilter(user: UserProfile | null | undefined): boolean {
+  return isPresident(user);
+}
+
+/**
  * Regra de Permissão de Eventos Globais do Calendário:
  * Apenas Diretores e o Presidente podem criar ou apagar eventos corporativos globais.
  * Funcionários comuns e membros podem apenas visualizá-los.

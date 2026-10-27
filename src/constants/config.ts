@@ -1,11 +1,11 @@
 import type { Department, Priority, Status, UserProfile } from '../types/ticket';
 
 /**
- * Configurações de negócio do Service Desk: departamentos, categorias,
- * prioridades, SLA, equipe de atendimento e fluxo de status.
+ * Configurações de negócio do Service Desk da Tecno System:
+ * Departamentos exclusivos: Financeiro, RH, Marketing e Projetos.
  */
 
-export const DEPARTMENTS: Department[] = ['TI', 'RH', 'Financeiro', 'Operações', 'Diretoria'];
+export const DEPARTMENTS: Department[] = ['Financeiro', 'RH', 'Marketing', 'Projetos'];
 
 export const PRIORITIES: Priority[] = ['Baixa', 'Média', 'Alta', 'Crítica'];
 
@@ -13,11 +13,10 @@ export const STATUSES: Status[] = ['Aberto', 'Em Andamento', 'Pendente', 'Resolv
 
 /** Categorias disponíveis por departamento. */
 export const CATEGORIES_BY_DEPARTMENT: Record<Department, string[]> = {
-  TI: ['Hardware', 'Software', 'Rede e Internet', 'Acesso e Senhas', 'E-mail', 'Outros'],
-  RH: ['Admissão', 'Desligamento', 'Férias', 'Benefícios', 'Treinamento', 'Outros'],
   Financeiro: ['Reembolso', 'Folha de Pagamento', 'Notas Fiscais', 'Contas a Pagar', 'Orçamento', 'Outros'],
-  Operações: ['Infraestrutura Predial', 'Logística', 'Manutenção', 'Compras', 'Segurança', 'Outros'],
-  Diretoria: ['Decisões Estratégicas', 'Aprovações Executivas', 'Compliance e Governança', 'Políticas Internas', 'Outros'],
+  RH: ['Admissão', 'Desligamento', 'Férias', 'Benefícios', 'Treinamento', 'Outros'],
+  Marketing: ['Redes Sociais', 'Design & Branding', 'Campanhas', 'Material Gráfico', 'Site Institucional', 'Outros'],
+  Projetos: ['Planejamento', 'Cronograma', 'Entregas', 'Recursos', 'Escopo & Mudanças', 'Outros'],
 };
 
 /** Prazo de atendimento (em horas) conforme a prioridade. */
@@ -38,11 +37,10 @@ export const PRIORITY_WEIGHT: Record<Priority, number> = {
 
 /** Equipe de atendimento agrupada por departamento. */
 export const AGENTS_BY_DEPARTMENT: Record<Department, string[]> = {
-  TI: ['Lucas Silva', 'Carlos Mendes', 'Juliana Rocha', 'Rafael Lima'],
-  RH: ['Helena Rocha', 'Patrícia Alves', 'Fernanda Costa'],
-  Financeiro: ['Marcos Oliveira', 'Beatriz Santos'],
-  Operações: ['Eduardo Ferreira', 'Lucas Martins'],
-  Diretoria: ['Presidente (Admin)'],
+  Financeiro: ['Marcos Oliveira', 'Beatriz Santos', 'Bruno Carvalho'],
+  RH: ['Helena Rocha', 'Patrícia Alves', 'Fernanda Costa', 'Camila Ribeiro'],
+  Marketing: ['Diego Nascimento', 'Eduardo Ferreira', 'Larissa Mendes'],
+  Projetos: ['Lucas Silva', 'Carlos Mendes', 'Mariana Souza', 'Rafael Lima'],
 };
 
 export type TransitionTone = 'primary' | 'success' | 'warning' | 'neutral' | 'danger';
@@ -83,20 +81,22 @@ export const SERVICE_DESK_NAME = 'Service Desk';
 export const STORAGE_KEYS = {
   tickets: 'tecnosystem.servicedesk.tickets.v1',
   view: 'tecnosystem.servicedesk.view.v1',
+  chamadosView: 'tecnosystem.servicedesk.chamados_view.v1',
   currentUser: 'currentUser',
   usersList: 'usersList',
   auditLogs: 'auditLogs',
+  theme: 'tecnosystem.servicedesk.theme',
 } as const;
 
-/** Lista inicial de colaboradores da Tecno System com credenciais e papéis. */
+/** Lista inicial de colaboradores da Tecno System com credenciais e papéis nos 4 departamentos. */
 export const INITIAL_USERS: UserProfile[] = [
   {
     id: 'user-presidente',
     name: 'Presidente (Admin)',
     email: 'presidente@gmail.com',
-    departmentEmail: 'diretoria@tecnosystem.com',
-    department: 'Diretoria',
-    role: 'Presidente / Admin',
+    departmentEmail: 'projetos@tecnosystem.com',
+    department: 'Projetos',
+    role: 'Presidente',
     createdAt: '2026-01-01T08:00:00.000Z',
   },
   {
@@ -105,15 +105,15 @@ export const INITIAL_USERS: UserProfile[] = [
     email: 'rh@tecnosystem.com',
     departmentEmail: 'rh@tecnosystem.com',
     department: 'RH',
-    role: 'Diretor de RH',
+    role: 'Diretor',
     createdAt: '2026-01-01T08:30:00.000Z',
   },
   {
-    id: 'user-ti',
-    name: 'Membro de TI',
-    email: 'ti@tecnosystem.com',
-    departmentEmail: 'ti@tecnosystem.com',
-    department: 'TI',
+    id: 'user-projetos',
+    name: 'Membro de Projetos',
+    email: 'projetos@tecnosystem.com',
+    departmentEmail: 'projetos@tecnosystem.com',
+    department: 'Projetos',
     role: 'Membro',
     createdAt: '2026-01-01T09:00:00.000Z',
   },
@@ -121,8 +121,8 @@ export const INITIAL_USERS: UserProfile[] = [
     id: 'user-01',
     name: 'Mariana Souza',
     email: 'mariana.souza@tecnosystem.com.br',
-    departmentEmail: 'ti@tecnosystem.com',
-    department: 'TI',
+    departmentEmail: 'projetos@tecnosystem.com',
+    department: 'Projetos',
     role: 'Membro',
     createdAt: '2026-01-10T08:00:00.000Z',
   },
@@ -130,9 +130,9 @@ export const INITIAL_USERS: UserProfile[] = [
     id: 'user-02',
     name: 'Carlos Mendes',
     email: 'carlos.mendes@tecnosystem.com.br',
-    departmentEmail: 'ti@tecnosystem.com',
-    department: 'TI',
-    role: 'Diretor de TI',
+    departmentEmail: 'projetos@tecnosystem.com',
+    department: 'Projetos',
+    role: 'Diretor',
     createdAt: '2026-01-15T09:00:00.000Z',
   },
   {
@@ -150,7 +150,7 @@ export const INITIAL_USERS: UserProfile[] = [
     email: 'bruno.carvalho@tecnosystem.com.br',
     departmentEmail: 'financeiro@tecnosystem.com',
     department: 'Financeiro',
-    role: 'Diretor Financeiro',
+    role: 'Diretor',
     createdAt: '2026-02-05T11:00:00.000Z',
   },
   {
@@ -175,8 +175,8 @@ export const INITIAL_USERS: UserProfile[] = [
     id: 'user-07',
     name: 'Diego Nascimento',
     email: 'diego.nascimento@tecnosystem.com.br',
-    departmentEmail: 'operacoes@tecnosystem.com',
-    department: 'Operações',
+    departmentEmail: 'marketing@tecnosystem.com',
+    department: 'Marketing',
     role: 'Membro',
     createdAt: '2026-03-01T14:00:00.000Z',
   },
@@ -184,9 +184,9 @@ export const INITIAL_USERS: UserProfile[] = [
     id: 'user-08',
     name: 'Eduardo Ferreira',
     email: 'eduardo.ferreira@tecnosystem.com.br',
-    departmentEmail: 'operacoes@tecnosystem.com',
-    department: 'Operações',
-    role: 'Diretor de Operações',
+    departmentEmail: 'marketing@tecnosystem.com',
+    department: 'Marketing',
+    role: 'Diretor',
     createdAt: '2026-03-05T15:30:00.000Z',
   },
 ];

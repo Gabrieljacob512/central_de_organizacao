@@ -71,6 +71,16 @@ const ACTION_CONFIG: Record<AuditAction, { label: string; badge: string; icon: L
     badge: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800/80 dark:bg-rose-950/60 dark:text-rose-300',
     icon: Trash2,
   },
+  ATRIBUICAO_RESPONSAVEL: {
+    label: 'Responsável',
+    badge: 'border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-800/80 dark:bg-cyan-950/60 dark:text-cyan-300',
+    icon: UserCheck,
+  },
+  ALTERACAO_PERFIL: {
+    label: 'Perfil',
+    badge: 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-800/80 dark:bg-violet-950/60 dark:text-violet-300',
+    icon: UserCheck,
+  },
 };
 
 export function AuditLogsModal({ open, onClose, logs, onClearLogs }: AuditLogsModalProps) {

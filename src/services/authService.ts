@@ -25,6 +25,7 @@ export function mapDatabaseProfileToUserProfile(
     name: string;
     email: string;
     avatar_url: string | null;
+    theme?: string | null;
     is_active: boolean;
     must_change_password: boolean;
     created_at: string;
@@ -36,8 +37,10 @@ export function mapDatabaseProfileToUserProfile(
     id: profile.id,
     name: profile.name,
     email: profile.email,
-    department: (profile.departments?.code as Department) || 'TI',
+    department: (profile.departments?.code as Department) || 'Projetos',
     role: profile.roles?.name || 'Membro',
+    avatarUrl: profile.avatar_url,
+    theme: (profile.theme as any) || 'system',
     createdAt: profile.created_at,
     isActive: profile.is_active,
     mustChangePassword: profile.must_change_password,

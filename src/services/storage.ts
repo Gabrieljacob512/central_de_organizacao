@@ -49,11 +49,30 @@ export function loadTickets(): Ticket[] {
 }
 
 export function loadViewMode(): ViewMode {
-  return localStorage.getItem(STORAGE_KEYS.view) === 'kanban' ? 'kanban' : 'table';
+  const saved = localStorage.getItem(STORAGE_KEYS.view);
+  if (
+    saved &&
+    ['overview', 'tickets', 'my-tickets', 'metrics', 'workspace', 'calendar', 'audit', 'settings', 'table', 'kanban'].includes(saved)
+  ) {
+    return saved as ViewMode;
+  }
+  return 'overview';
 }
 
 export function saveViewMode(view: ViewMode): void {
   localStorage.setItem(STORAGE_KEYS.view, view);
+}
+
+export function loadChamadosViewPreference(): 'table' | 'kanban' {
+  if (typeof window !== 'undefined' && window.innerWidth < 640) {
+    return 'table'; // No celular o padrão é Lista
+  }
+  const saved = localStorage.getItem(STORAGE_KEYS.chamadosView);
+  return saved === 'kanban' ? 'kanban' : 'table';
+}
+
+export function saveChamadosViewPreference(view: 'table' | 'kanban'): void {
+  localStorage.setItem(STORAGE_KEYS.chamadosView, view);
 }
 
 /* --------------------------- Usuários (Sessão) --------------------------- */
@@ -77,15 +96,15 @@ export function loadUsersList(): UserProfile[] {
           ...u,
           departmentEmail:
             u.departmentEmail ??
-            (u.email ? `${(u.department || 'TI').toLowerCase()}@tecnosystem.com` : 'contato@tecnosystem.com'),
+            (u.email ? `${(u.department || 'Projetos').toLowerCase()}@tecnosystem.com` : 'contato@tecnosystem.com'),
           role:
             u.role ??
             (u.email === 'presidente@gmail.com' || u.email === 'presidente@tecnosystem.com'
-              ? 'Presidente / Admin'
+              ? 'Presidente'
               : 'Membro'),
         }));
 
-        // Garante a existência dos três seed users obrigatórios (Presidente, Diretor de RH, Membro de TI)
+        // Garante a existência dos três seed users obrigatórios (Presidente, Diretor de RH, Membro de Projetos)
         const requiredSeeds = INITIAL_USERS.slice(0, 3);
         const additions: UserProfile[] = [];
 
@@ -131,7 +150,7 @@ export function loadCurrentUser(): UserProfile | null {
         return {
           ...u,
           departmentEmail:
-            u.departmentEmail ?? `${(u.department || 'TI').toLowerCase()}@tecnosystem.com`,
+            u.departmentEmail ?? `${(u.department || 'Projetos').toLowerCase()}@tecnosystem.com`,
           role: u.role ?? 'Membro',
         };
       }

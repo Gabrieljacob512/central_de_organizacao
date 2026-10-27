@@ -8,8 +8,8 @@ export const TicketFormSchema = z.object({
   title: z.string().min(3, 'O título deve ter ao menos 3 caracteres.'),
   requester: z.string().min(1, 'O solicitante é obrigatório.'),
   email: z.string().email('E-mail corporativo inválido.'),
-  department: z.enum(['TI', 'RH', 'Financeiro', 'Operações', 'Diretoria']),
-  assignedDepartment: z.enum(['TI', 'RH', 'Financeiro', 'Operações', 'Diretoria']),
+  department: z.enum(['Financeiro', 'RH', 'Marketing', 'Projetos']),
+  assignedDepartment: z.enum(['Financeiro', 'RH', 'Marketing', 'Projetos']),
   category: z.string().min(1, 'A categoria é obrigatória.'),
   priority: z.enum(['Baixa', 'Média', 'Alta', 'Crítica']),
   description: z.string().min(10, 'A descrição deve ter ao menos 10 caracteres.'),
@@ -95,7 +95,7 @@ export async function fetchTickets(): Promise<Ticket[]> {
   });
 
   return ticketsData.map((t) => {
-    const deptCode = (depMap.get(t.department_id) || 'TI') as Department;
+    const deptCode = (depMap.get(t.department_id) || 'Projetos') as Department;
     const assignedDeptCode = (t.assigned_department_id ? depMap.get(t.assigned_department_id) : deptCode) as Department;
     const assigneeName = t.assignee_id ? assigneeMap.get(t.assignee_id) || null : null;
 
@@ -103,6 +103,7 @@ export async function fetchTickets(): Promise<Ticket[]> {
       id: t.id,
       title: t.title,
       requester: t.requester_name,
+      requesterId: t.requester_id,
       email: t.requester_email,
       department: deptCode,
       assignedDepartment: assignedDeptCode,
@@ -111,6 +112,7 @@ export async function fetchTickets(): Promise<Ticket[]> {
       description: t.description,
       status: t.status as Status,
       assignee: assigneeName,
+      assigneeId: t.assignee_id,
       projectId: (t as any).project_id || null,
       csatRating: (t as any).csat_rating || null,
       createdAt: t.created_at,

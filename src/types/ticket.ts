@@ -2,7 +2,7 @@
  * Tipos de domínio do Service Desk da Tecno System.
  */
 
-export type Department = 'TI' | 'RH' | 'Financeiro' | 'Operações' | 'Diretoria';
+export type Department = 'Financeiro' | 'RH' | 'Marketing' | 'Projetos';
 
 export type Priority = 'Baixa' | 'Média' | 'Alta' | 'Crítica';
 
@@ -11,14 +11,13 @@ export type Status = 'Aberto' | 'Em Andamento' | 'Pendente' | 'Resolvido' | 'Fec
 /** Cargos e hierarquia do sistema de chamados. */
 export type UserRole =
   | 'Presidente'
-  | 'Diretor de RH'
-  | 'Diretor de TI'
-  | 'Diretor Financeiro'
-  | 'Diretor de Operações'
   | 'Diretor'
+  | 'Diretor de RH'
+  | 'Diretor Financeiro'
+  | 'Diretor de Marketing'
+  | 'Diretor de Projetos'
   | 'Membro'
-  | 'DIRETOR'
-  | 'FUNCIONARIO'
+  | 'Cliente'
   | string;
 
 /** Perfil de colaborador / usuário para identificação, controle de acesso e auditoria. */
@@ -33,6 +32,8 @@ export interface UserProfile {
   createdAt: string;
   isActive?: boolean;
   mustChangePassword?: boolean;
+  avatarUrl?: string | null;
+  theme?: 'light' | 'dark' | 'system';
   permissions?: string[];
 }
 
@@ -42,6 +43,8 @@ export type AuditAction =
   | 'ALTERACAO_STATUS'
   | 'ALTERACAO_PRIORIDADE'
   | 'ATRIBUICAO_DEPARTAMENTO'
+  | 'ATRIBUICAO_RESPONSAVEL'
+  | 'ALTERACAO_PERFIL'
   | 'RESOLUCAO'
   | 'EXCLUSAO'
   | 'COMENTARIO'
@@ -52,6 +55,7 @@ export interface AuditLog {
   id: string;
   ticketId?: string;
   ticketTitle?: string;
+  departmentId?: string;
   action: AuditAction;
   performedBy: string; // Nome e e-mail do usuário ativo no momento da ação
   details: string;     // Ex: "Status alterado de EM_ANDAMENTO para RESOLVIDO"
@@ -93,6 +97,7 @@ export interface Ticket {
   id: string;
   title: string;
   requester: string;
+  requesterId?: string | null;
   email: string;
   /** Departamento de Origem do solicitante */
   department: Department;
@@ -104,6 +109,7 @@ export interface Ticket {
   status: Status;
   /** Atendente responsável (null = sem responsável). */
   assignee: string | null;
+  assigneeId?: string | null;
   createdAt: string;
   updatedAt: string;
   /** Data-limite do SLA calculada a partir da prioridade. */
@@ -115,10 +121,21 @@ export interface Ticket {
   history: TicketEvent[];
 }
 
+export interface PendingAttachmentFile {
+  file: File;
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  description: string;
+  previewUrl?: string;
+}
+
 /** Dados editáveis em formulário (assignee vazio = sem responsável). */
 export interface TicketFormData {
   title: string;
   requester: string;
+  requesterId?: string;
   email: string;
   department: Department;
   assignedDepartment: Department;
@@ -126,13 +143,24 @@ export interface TicketFormData {
   priority: Priority;
   description: string;
   assignee: string;
+  assigneeId?: string;
   projectId?: string;
+  initialAttachments?: PendingAttachmentFile[];
 }
-
 
 export type TicketFormErrors = Partial<Record<keyof TicketFormData, string>>;
 
-export type ViewMode = 'table' | 'kanban' | 'calendar' | 'workspace';
+export type ViewMode =
+  | 'overview'
+  | 'tickets'
+  | 'my-tickets'
+  | 'metrics'
+  | 'workspace'
+  | 'calendar'
+  | 'audit'
+  | 'settings'
+  | 'table'
+  | 'kanban';
 
 export type SortOption = 'recent' | 'oldest' | 'priority' | 'sla';
 

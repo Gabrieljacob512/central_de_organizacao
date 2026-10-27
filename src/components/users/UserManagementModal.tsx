@@ -32,10 +32,6 @@ interface UserManagementModalProps {
 
 const COMMON_ROLES = [
   'Membro',
-  'Diretor de TI',
-  'Diretor de RH',
-  'Diretor Financeiro',
-  'Diretor de Operações',
   'Diretor',
   'Presidente',
 ];
@@ -57,7 +53,7 @@ export function UserManagementModal({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [departmentEmail, setDepartmentEmail] = useState('');
-  const [department, setDepartment] = useState<Department>('TI');
+  const [department, setDepartment] = useState<Department>('Projetos');
   const [role, setRole] = useState('Membro');
   const [customRole, setCustomRole] = useState('');
   const [password, setPassword] = useState('123');
