@@ -16,6 +16,7 @@ import { UnifiedTicketsView } from './components/tickets/UnifiedTicketsView';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { KnowledgeBaseModal } from './components/knowledge/KnowledgeBaseModal';
 import { NotificationPreferencesModal } from './components/notifications/NotificationPreferencesModal';
+import { FinanceView } from './components/finance/FinanceView';
 import { NotificationsView } from './components/notifications/NotificationsView';
 import { PeopleView } from './components/people/PeopleView';
 import { UserManagementModal } from './components/users/UserManagementModal';
@@ -366,6 +367,11 @@ export default function App() {
             currentUser={currentUser}
             now={now}
           />
+        )}
+
+        {/* Gestão Financeira */}
+        {view === 'finance' && (
+          <FinanceView currentUser={currentUser} />
         )}
 
         {/* Gestão de Pessoas & RH */}

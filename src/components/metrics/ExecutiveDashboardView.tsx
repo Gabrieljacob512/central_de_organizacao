@@ -2,7 +2,8 @@ import { Building2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { ALL_DEPARTMENTS } from '../../constants/config';
 import type { Department, Ticket, UserProfile } from '../../types/ticket';
-import { isExecutive } from '../../utils/rbac';
+import { canViewFinance, isExecutive } from '../../utils/rbac';
+import { ExecutiveFinanceCharts } from './ExecutiveFinanceCharts';
 import { MetricsCards } from './MetricsCards';
 import { MetricsDashboard } from './MetricsDashboard';
 
@@ -71,6 +72,9 @@ export function ExecutiveDashboardView({
 
       {/* Painel Gráfico Executivo com Gráficos Recharts e Exportação CSV */}
       <MetricsDashboard tickets={scopedTickets} now={now} />
+
+      {/* Seção Financeira Executiva com 4 Gráficos Recharts (apenas com finance.view) */}
+      {canViewFinance(currentUser) && <ExecutiveFinanceCharts />}
     </div>
   );
 }
