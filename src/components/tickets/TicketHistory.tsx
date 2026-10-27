@@ -27,6 +27,7 @@ import {
 } from '../../services/commentService';
 import type { AuthorRole, EventType, Ticket, TicketEvent } from '../../types/ticket';
 import { formatDateTime, formatRelative } from '../../utils/format';
+import { canViewAudit } from '../../utils/rbac';
 import { Avatar } from '../ui/Avatar';
 import { AttachmentCard, type PendingFileItem } from './AttachmentCard';
 import { AttachmentUploader } from './AttachmentUploader';
@@ -213,6 +214,11 @@ export function TicketHistory({ ticket, now, onComment }: TicketHistoryProps) {
       {/* Lista de Mensagens / Timeline */}
       <ol className="flex-1 space-y-4 overflow-y-auto px-5 py-5 sm:px-6">
         {liveEvents.map((event) => {
+          // Filtrar eventos técnicos se o usuário não tiver permissão audit.view (Seção 5)
+          if (event.type !== 'comment' && !canViewAudit(currentUser)) {
+            return null;
+          }
+
           // Filtrar notas internas para quem não tem permissão
           if (event.visibility === 'internal' && !canInternalNotes) {
             return null;

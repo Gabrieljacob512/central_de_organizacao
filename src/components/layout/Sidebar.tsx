@@ -1,22 +1,18 @@
 import {
-  BookOpen,
+  BarChart3,
   Calendar,
-  Columns3,
-  Download,
   History,
-  KeyRound,
+  Inbox,
+  LayoutDashboard,
   Lock,
   LogOut,
-  RotateCcw,
-  Rows3,
-  ShieldCheck,
-  Users,
+  Settings,
+  UserCheck,
   X,
 } from 'lucide-react';
 import type { UserProfile, ViewMode } from '../../types/ticket';
-import { canManageUsers, getUserRoleBadgeInfo } from '../../utils/rbac';
+import { canViewAudit, getUserRoleBadgeInfo } from '../../utils/rbac';
 import { Avatar } from '../ui/Avatar';
-import { ThemeToggle } from '../ui/ThemeToggle';
 
 interface SidebarProps {
   open: boolean;
@@ -24,24 +20,22 @@ interface SidebarProps {
   currentUser: UserProfile | null;
   view: ViewMode;
   onViewChange: (view: ViewMode) => void;
-  onOpenAuditLogs: () => void;
-  onResetData: () => void;
-  onOpenChangePassword: () => void;
-  onOpenUserManagement?: () => void;
-  onOpenKnowledgeBase?: () => void;
-  onExportCalendarIcs?: () => void;
-  onOpenLgpdModal?: () => void;
   onLogout: () => void;
 }
 
-
 /**
- * Menu Lateral Expansível (Slide Drawer) com Seção de Configurações (Requisito 4).
- * Contém EXCLUSIVAMENTE:
- * 1. Bloco de Identificação do Usuário (Nome, E-mail, Depto e Cargo);
- * 2. Navegação da Aplicação (Lista/Kanban, Gestão de Colaboradores [se Presidente/RH], Auditoria, Restaurar Demo);
- * 3. Bloco Configurações (Mudar Senha, Modo Claro/Escuro);
- * 4. Botão Sair da Conta (Logout).
+ * Menu Lateral Retrátil (Slide Drawer - Mobile First).
+ * Estrutura obrigatória:
+ * 1. Perfil do usuário no topo: foto (ou iniciais), nome, cargo e departamento.
+ * 2. Visão Geral das Solicitações
+ * 3. Chamados (unificado)
+ * 4. Meus Chamados
+ * 5. Painel Executivo & Métricas
+ * 6. Espaço Privado
+ * 7. Calendário
+ * 8. Auditoria (somente Presidente e Diretor)
+ * 9. Configurações
+ * 10. Sair (logout) no rodapé da sidebar
  */
 export function Sidebar({
   open,
@@ -49,18 +43,76 @@ export function Sidebar({
   currentUser,
   view,
   onViewChange,
-  onOpenAuditLogs,
-  onResetData,
-  onOpenChangePassword,
-  onOpenUserManagement,
-  onOpenKnowledgeBase,
-  onExportCalendarIcs,
-  onOpenLgpdModal,
   onLogout,
 }: SidebarProps) {
   const roleBadge = getUserRoleBadgeInfo(currentUser);
-  const hasUserManagementAccess = canManageUsers(currentUser);
+  const hasAuditAccess = canViewAudit(currentUser);
 
+  const isCurrentView = (itemKey: ViewMode) => {
+    if (itemKey === 'tickets') {
+      return view === 'tickets' || view === 'table' || view === 'kanban';
+    }
+    return view === itemKey;
+  };
+
+  const navItems = [
+    {
+      id: 'nav-overview',
+      key: 'overview' as ViewMode,
+      label: 'Visão Geral das Solicitações',
+      icon: LayoutDashboard,
+      visible: true,
+    },
+    {
+      id: 'nav-tickets',
+      key: 'tickets' as ViewMode,
+      label: 'Chamados',
+      icon: Inbox,
+      visible: true,
+    },
+    {
+      id: 'nav-my-tickets',
+      key: 'my-tickets' as ViewMode,
+      label: 'Meus Chamados',
+      icon: UserCheck,
+      visible: true,
+    },
+    {
+      id: 'nav-metrics',
+      key: 'metrics' as ViewMode,
+      label: 'Painel Executivo & Métricas',
+      icon: BarChart3,
+      visible: true,
+    },
+    {
+      id: 'nav-workspace',
+      key: 'workspace' as ViewMode,
+      label: 'Espaço Privado',
+      icon: Lock,
+      visible: true,
+    },
+    {
+      id: 'nav-calendar',
+      key: 'calendar' as ViewMode,
+      label: 'Calendário',
+      icon: Calendar,
+      visible: true,
+    },
+    {
+      id: 'nav-audit',
+      key: 'audit' as ViewMode,
+      label: 'Auditoria',
+      icon: History,
+      visible: hasAuditAccess, // Somente Presidente e Diretor
+    },
+    {
+      id: 'nav-settings',
+      key: 'settings' as ViewMode,
+      label: 'Configurações',
+      icon: Settings,
+      visible: true,
+    },
+  ];
 
   return (
     <div
@@ -69,9 +121,9 @@ export function Sidebar({
       }`}
       role="dialog"
       aria-modal="true"
-      aria-label="Menu lateral de navegação e configurações"
+      aria-label="Menu lateral de navegação"
     >
-      {/* Backdrop escurecido com blur suave */}
+      {/* Backdrop com desfoque suave */}
       <div
         className={`fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-300 ease-in-out ${
           open ? 'opacity-100' : 'opacity-0'
@@ -79,16 +131,16 @@ export function Sidebar({
         onClick={onClose}
       />
 
-      {/* Painel lateral que desliza suavemente da esquerda para a direita */}
+      {/* Painel lateral deslizante */}
       <aside
         id="slide-drawer-panel"
         className={`fixed inset-y-0 left-0 z-10 flex h-full w-80 max-w-[85vw] flex-col justify-between border-r border-slate-200/90 bg-white p-5 shadow-2xl transition-transform duration-300 ease-in-out dark:border-slate-800 dark:bg-slate-900 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="space-y-6 overflow-y-auto">
-          {/* Cabeçalho do Drawer com Logo e Botão Fechar */}
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
+        <div className="space-y-5 overflow-y-auto pr-1">
+          {/* Cabeçalho do Menu com Logo e Botão Fechar */}
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
             <div className="flex items-center gap-2.5">
               <img
                 src="/logo-tecnosystem.png"
@@ -112,7 +164,7 @@ export function Sidebar({
               id="close-sidebar-btn"
               type="button"
               onClick={onClose}
-              className="icon-btn min-h-[40px] min-w-[40px] text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
+              className="icon-btn min-h-[44px] min-w-[44px] text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
               aria-label="Fechar menu lateral"
             >
               <X className="h-5 w-5" />
@@ -120,12 +172,16 @@ export function Sidebar({
           </div>
 
           {/* ==================================================================== */}
-          {/* 1. BLOCO DE IDENTIFICAÇÃO DO USUÁRIO LOGADO */}
+          {/* 1. PERFIL DO USUÁRIO NO TOPO: FOTO/INICIAIS, NOME, CARGO E DEPTO */}
           {/* ==================================================================== */}
           {currentUser && (
             <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/60 shadow-2xs">
-              <div className="flex items-start gap-3">
-                <Avatar name={currentUser.name} size="md" />
+              <div className="flex items-center gap-3">
+                <Avatar
+                  name={currentUser.name}
+                  avatarUrl={currentUser.avatarUrl}
+                  size="md"
+                />
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate text-sm font-bold text-slate-900 dark:text-white">
                     {currentUser.name}
@@ -134,13 +190,11 @@ export function Sidebar({
                     {currentUser.email}
                   </p>
 
-                  {/* Badges de Departamento e Cargo */}
-                  <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 uppercase dark:border-blue-900/60 dark:bg-blue-950/60 dark:text-blue-300">
-                      Depto: {currentUser.department}
+                      {currentUser.department}
                     </span>
 
-                    {/* Cargo Destacado */}
                     <span
                       className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold ${roleBadge.badgeClass}`}
                     >
@@ -154,216 +208,41 @@ export function Sidebar({
           )}
 
           {/* ==================================================================== */}
-          {/* 2. NAVEGAÇÃO DA APLICAÇÃO */}
+          {/* NAVEGAÇÃO COMPLETA RIGOROSAMENTE NA ORDEM DEFINIDA */}
           {/* ==================================================================== */}
-          <div className="space-y-1.5">
-            <p className="px-2 text-[10px] font-bold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-              Navegação
-            </p>
+          <nav className="space-y-1" aria-label="Menu principal">
+            {navItems
+              .filter((item) => item.visible)
+              .map((item) => {
+                const Icon = item.icon;
+                const active = isCurrentView(item.key);
 
-            {/* Alternar Visualização: Lista */}
-            <button
-              id="nav-view-table"
-              type="button"
-              onClick={() => {
-                onViewChange('table');
-                onClose();
-              }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition cursor-pointer ${
-                view === 'table'
-                  ? 'bg-blue-600 text-white shadow-xs dark:bg-blue-600'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Rows3 className="h-4 w-4" />
-              <span>Chamados em Lista</span>
-            </button>
-
-            {/* Alternar Visualização: Kanban */}
-            <button
-              id="nav-view-kanban"
-              type="button"
-              onClick={() => {
-                onViewChange('kanban');
-                onClose();
-              }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition cursor-pointer ${
-                view === 'kanban'
-                  ? 'bg-blue-600 text-white shadow-xs dark:bg-blue-600'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Columns3 className="h-4 w-4" />
-              <span>Quadro Kanban</span>
-            </button>
-
-            {/* Navegação: Calendário */}
-            <button
-              id="nav-view-calendar"
-              type="button"
-              onClick={() => {
-                onViewChange('calendar');
-                onClose();
-              }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition cursor-pointer ${
-                view === 'calendar'
-                  ? 'bg-blue-600 text-white shadow-xs dark:bg-blue-600'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Calendar className="h-4 w-4" />
-              <span>Calendário</span>
-            </button>
-
-            {/* Navegação: Espaço Privado */}
-            <button
-              id="nav-view-workspace"
-              type="button"
-              onClick={() => {
-                onViewChange('workspace');
-                onClose();
-              }}
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition cursor-pointer ${
-                view === 'workspace'
-                  ? 'bg-blue-600 text-white shadow-xs dark:bg-blue-600'
-                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Lock className="h-4 w-4" />
-              <span>Espaço Privado</span>
-            </button>
-
-            {/* Base de Conhecimento & FAQs */}
-            {onOpenKnowledgeBase && (
-              <button
-                id="nav-knowledge-base"
-                type="button"
-                onClick={() => {
-                  onOpenKnowledgeBase();
-                  onClose();
-                }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition cursor-pointer"
-              >
-                <BookOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <span>Base de Conhecimento</span>
-              </button>
-            )}
-
-            {/* Exportar Calendário .ICS */}
-            {onExportCalendarIcs && (
-              <button
-                id="nav-export-ics"
-                type="button"
-                onClick={() => {
-                  onExportCalendarIcs();
-                  onClose();
-                }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition cursor-pointer"
-              >
-                <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Exportar Calendário (.ICS)</span>
-              </button>
-            )}
-
-            {/* Gestão de Colaboradores (Exclusivo para Presidente e Diretor de RH) */}
-            {hasUserManagementAccess && onOpenUserManagement && (
-              <button
-                id="nav-user-management"
-                type="button"
-                onClick={() => {
-                  onOpenUserManagement();
-                  onClose();
-                }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition cursor-pointer"
-              >
-                <Users className="h-4 w-4" />
-                <span>Gerenciar Colaboradores</span>
-              </button>
-            )}
-
-            {/* Central de Auditoria / Histórico de Eventos */}
-            <button
-              id="nav-audit-logs"
-              type="button"
-              onClick={() => {
-                onOpenAuditLogs();
-                onClose();
-              }}
-              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition cursor-pointer"
-            >
-              <History className="h-4 w-4" />
-              <span>Central de Auditoria</span>
-            </button>
-
-            {/* Restaurar Dados Demo (Exclusivo para ambiente de desenvolvimento) */}
-            {import.meta.env.DEV && (
-              <button
-                id="nav-reset-data"
-                type="button"
-                onClick={() => {
-                  onResetData();
-                  onClose();
-                }}
-                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
-              >
-                <RotateCcw className="h-4 w-4 text-slate-500" />
-                <span>Restaurar Dados Demo</span>
-              </button>
-            )}
-          </div>
-
-          {/* ==================================================================== */}
-          {/* 3. BLOCO "CONFIGURAÇÕES" */}
-          {/* ==================================================================== */}
-          <div className="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-            <p className="px-2 text-[10px] font-bold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-              Configurações
-            </p>
-
-            {/* Mudar Senha */}
-            <button
-              id="btn-change-password-sidebar"
-              type="button"
-              onClick={() => {
-                onOpenChangePassword();
-                onClose();
-              }}
-              className="flex w-full items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-2.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:hover:border-slate-750 dark:hover:bg-slate-800 dark:hover:text-white cursor-pointer"
-            >
-              <KeyRound className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <span>Mudar Minha Senha</span>
-            </button>
-
-            {/* Privacidade & LGPD */}
-            {onOpenLgpdModal && (
-              <button
-                id="btn-lgpd-sidebar"
-                type="button"
-                onClick={() => {
-                  onOpenLgpdModal();
-                  onClose();
-                }}
-                className="flex w-full items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-2.5 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:hover:border-slate-750 dark:hover:bg-slate-800 dark:hover:text-white cursor-pointer"
-              >
-                <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                <span>Privacidade & LGPD</span>
-              </button>
-            )}
-
-            {/* Modo Claro / Modo Escuro */}
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-850">
-              <div className="mb-2 flex items-center justify-between px-1">
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  Tema do Sistema
-                </span>
-              </div>
-              <ThemeToggle variant="full" />
-            </div>
-          </div>
-
+                return (
+                  <button
+                    key={item.id}
+                    id={item.id}
+                    type="button"
+                    onClick={() => {
+                      onViewChange(item.key);
+                      onClose();
+                    }}
+                    className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-xs font-semibold transition cursor-pointer ${
+                      active
+                        ? 'bg-blue-600 text-white shadow-xs dark:bg-blue-600'
+                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                );
+              })}
+          </nav>
         </div>
 
-        {/* Rodapé: Botão "Sair da Conta" (Logout) */}
+        {/* ==================================================================== */}
+        {/* 10. SAIR DA CONTA (LOGOUT) NO RODAPÉ */}
+        {/* ==================================================================== */}
         <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
           <button
             id="btn-logout"

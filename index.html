@@ -9,8 +9,21 @@
     <meta name="theme-color" content="#dc2626" />
     <meta
       name="description"
-      content="Service Desk interno da Tecno System: abertura, acompanhamento e resolução de chamados de TI, RH, Financeiro e Operações com controle de SLA."
+      content="Service Desk interno da Tecno System: abertura, acompanhamento e resolução de chamados de Financeiro, RH, Marketing e Projetos com controle de SLA."
     />
+    <script>
+      (function() {
+        try {
+          var theme = localStorage.getItem('theme') || localStorage.getItem('tecnosystem.servicedesk.theme');
+          var isDark = theme === 'dark' || (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

@@ -235,14 +235,10 @@ export function TicketFields({ idPrefix, value, errors, onChange, isCreateMode =
           className={`${inputClass()} cursor-pointer`}
         >
           <option value="">Sem atendente específico (Fila da equipe de {targetDept})</option>
-          {DEPARTMENTS.map((dept) => (
-            <optgroup key={dept} label={`Equipe ${dept}${dept === targetDept ? ' (Recomendado)' : ''}`}>
-              {AGENTS_BY_DEPARTMENT[dept].map((agent) => (
-                <option key={agent} value={agent}>
-                  {agent}
-                </option>
-              ))}
-            </optgroup>
+          {(AGENTS_BY_DEPARTMENT[targetDept] || []).map((agent) => (
+            <option key={agent} value={agent}>
+              {agent}
+            </option>
           ))}
         </select>
       </FormField>

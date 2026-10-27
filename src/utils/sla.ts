@@ -25,6 +25,15 @@ export interface SlaInfo {
 
 export const isClosedStatus = (status: Status): boolean => status === 'Resolvido' || status === 'Fechado';
 
+/** Verifica se o chamado ultrapassou o prazo de SLA */
+export function isSlaBreached(ticket: Ticket, now: number): boolean {
+  if (isClosedStatus(ticket.status)) {
+    const end = new Date(ticket.resolvedAt ?? ticket.updatedAt).getTime();
+    return end > new Date(ticket.slaDueAt).getTime();
+  }
+  return now > new Date(ticket.slaDueAt).getTime();
+}
+
 /** Calcula a data-limite do SLA a partir da data de abertura e prioridade. */
 export function computeSlaDueAt(createdAtIso: string, priority: Priority): string {
   return new Date(new Date(createdAtIso).getTime() + SLA_HOURS[priority] * HOUR).toISOString();

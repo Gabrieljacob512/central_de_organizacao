@@ -164,6 +164,31 @@ export async function updatePassword(newPassword: string): Promise<{ success: bo
   return { success: true };
 }
 
+/** Altera a senha reautenticando com a senha atual */
+export async function changeUserPasswordWithReauth(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ success: boolean; error?: string }> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const email = sessionData?.session?.user?.email;
+  if (!email) {
+    return { success: false, error: 'Sessão inválida. Faça login novamente.' };
+  }
+
+  // Validação da senha atual via login
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email,
+    password: currentPassword,
+  });
+
+  if (signInError) {
+    return { success: false, error: 'A senha atual informada está incorreta.' };
+  }
+
+  // Atualização com nova senha
+  return updatePassword(newPassword);
+}
+
 /** Envia e-mail de recuperação de senha pelo Supabase Auth */
 export async function sendPasswordResetEmail(email: string): Promise<{ success: boolean; error?: string }> {
   const emailValidation = z.string().email('E-mail inválido.').safeParse(email);

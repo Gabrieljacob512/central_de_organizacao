@@ -76,7 +76,7 @@ export async function reopenTicket(
 }
 
 /**
- * Anonimização de dados do usuário (LGPD - Direito ao Esquecimento)
+ * Anonimização de dados cadastrais do usuário (Direito ao Esquecimento)
  */
 export async function anonymizeUserData(
   userId: string

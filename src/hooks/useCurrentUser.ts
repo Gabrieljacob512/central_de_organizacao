@@ -6,6 +6,7 @@ import {
   signIn,
   signOut,
   updatePassword,
+  changeUserPasswordWithReauth,
   sendPasswordResetEmail,
 } from '../services/authService';
 import { loadCurrentUser, loadUsersList, saveCurrentUser, saveUsersList } from '../services/storage';
@@ -206,14 +207,23 @@ export function useCurrentUser() {
     [],
   );
 
-  /** Atualiza a senha do usuário atualmente conectado via Supabase Auth */
+  /** Atualiza a senha do usuário atualmente conectado via Supabase Auth (suporta reautenticação com senha atual) */
   const changePassword = useCallback(
-    async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    async (
+      newPasswordOrCurrent: string,
+      maybeNewPassword?: string,
+    ): Promise<{ success: boolean; error?: string }> => {
       if (!currentUser) {
         return { success: false, error: 'Nenhum usuário autenticado no momento.' };
       }
 
-      const res = await updatePassword(newPassword);
+      let res: { success: boolean; error?: string };
+      if (maybeNewPassword) {
+        res = await changeUserPasswordWithReauth(newPasswordOrCurrent, maybeNewPassword);
+      } else {
+        res = await updatePassword(newPasswordOrCurrent);
+      }
+
       if (res.success) {
         const updated = { ...currentUser, mustChangePassword: false };
         setCurrentUserState(updated);
@@ -223,6 +233,13 @@ export function useCurrentUser() {
     },
     [currentUser],
   );
+
+  /** Atualiza o perfil do usuário logado no estado e cache */
+  const updateCurrentUser = useCallback((updated: UserProfile) => {
+    setCurrentUserState(updated);
+    saveCurrentUser(updated);
+    setUsersList((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+  }, []);
 
   /** Encerra a sessão ativa do usuário (Logout com Supabase Auth) */
   const logout = useCallback(async () => {
@@ -239,6 +256,7 @@ export function useCurrentUser() {
     deleteUser,
     resetPassword,
     changePassword,
+    updateCurrentUser,
     logout,
   };
 }

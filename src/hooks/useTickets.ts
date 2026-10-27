@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { SERVICE_DESK_NAME } from '../constants/config';
-import { buildSeedTickets } from '../data/seed';
 import { loadTickets, saveTickets } from '../services/storage';
 import {
   fetchTickets,
@@ -396,19 +395,5 @@ export function useTickets(
     [tickets, performer, onAudit],
   );
 
-  /** Restaura os dados de demonstração (Seed Data). */
-  const resetData = useCallback(() => {
-    fetchTickets().then((dbTickets) => {
-      if (dbTickets.length > 0) {
-        setTickets(dbTickets);
-        saveTickets(dbTickets);
-      } else {
-        const seed = buildSeedTickets();
-        setTickets(seed);
-        saveTickets(seed);
-      }
-    });
-  }, []);
-
-  return { tickets, createTicket, updateTicket, changeStatus, assignTicket, addComment, deleteTicket, resetData };
+  return { tickets, createTicket, updateTicket, changeStatus, assignTicket, addComment, deleteTicket };
 }

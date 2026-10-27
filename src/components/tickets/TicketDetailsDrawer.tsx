@@ -6,6 +6,7 @@ import { useBodyScrollLock, useEscapeKey } from '../../hooks/useUi';
 import { useToast } from '../../hooks/useToast';
 import type { AuthorRole, Department, Status, Ticket, TicketFormData, TicketFormErrors } from '../../types/ticket';
 import { formatDateTime, formatRelative } from '../../utils/format';
+import { canAssignTicket } from '../../utils/rbac';
 import { clearFieldErrors, hasErrors, validateTicketForm } from '../../utils/validation';
 import { Avatar } from '../ui/Avatar';
 import { PriorityBadge, StatusBadge } from '../ui/Badges';
@@ -13,12 +14,15 @@ import { inputClass } from '../ui/formStyles';
 import { SlaIndicator } from '../ui/SlaIndicator';
 import { CsatRatingWidget } from './CsatRatingWidget';
 import { ReopenTicketModal } from './ReopenTicketModal';
+import { TicketAttachmentsList } from './TicketAttachmentsList';
 import { TicketFields } from './TicketFields';
 import { TicketHistory } from './TicketHistory';
+import type { UserProfile } from '../../types/ticket';
 
 interface TicketDetailsDrawerProps {
   ticket: Ticket | null;
   now: number;
+  currentUser?: UserProfile | null;
   /** Desabilita o fechamento por ESC (ex.: quando há um modal de confirmação por cima). */
   escapeDisabled?: boolean;
   onClose: () => void;
@@ -53,6 +57,7 @@ const toFormData = (ticket: Ticket): TicketFormData => ({
 function DrawerContent({
   ticket,
   now,
+  currentUser,
   escapeDisabled,
   onClose,
   onChangeStatus,
@@ -68,6 +73,7 @@ function DrawerContent({
   const [form, setForm] = useState<TicketFormData>(() => toFormData(ticket));
   const [errors, setErrors] = useState<TicketFormErrors>({});
   const [reopenModalOpen, setReopenModalOpen] = useState(false);
+  const canAssign = canAssignTicket(currentUser);
 
   useBodyScrollLock(true);
   useEscapeKey(() => (editing ? setEditing(false) : onClose()), !escapeDisabled);
@@ -275,28 +281,31 @@ function DrawerContent({
 
                       <div className="flex-1">
                         <label htmlFor="reassign-ticket" className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold tracking-wide text-slate-500 dark:text-slate-400 uppercase">
-                          <UserCog className="h-4 w-4 text-blue-600 dark:text-blue-400" /> Atendente Específico
+                          <UserCog className="h-4 w-4 text-blue-600 dark:text-blue-400" /> Atendente Responsável
                         </label>
                         <div className="flex items-center gap-2">
                           <Avatar name={ticket.assignee} size="sm" />
                           <select
                             id="reassign-ticket"
+                            disabled={!canAssign}
                             value={ticket.assignee ?? ''}
                             onChange={(event) => onAssign(ticket.id, event.target.value || null, ticket.assignedDepartment)}
-                            className={`${inputClass()} cursor-pointer`}
+                            className={`${inputClass()} ${!canAssign ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                            title={!canAssign ? 'Apenas o Presidente e Diretores podem atribuir responsáveis.' : undefined}
                           >
-                            <option value="">Sem atendente (Fila geral)</option>
-                            {DEPARTMENTS.map((department) => (
-                              <optgroup key={department} label={`Equipe ${department}${department === currentAssignedDept ? ' (Recomendado)' : ''}`}>
-                                {AGENTS_BY_DEPARTMENT[department].map((agent) => (
-                                  <option key={agent} value={agent}>
-                                    {agent}
-                                  </option>
-                                ))}
-                              </optgroup>
+                            <option value="">Sem atendente (Fila de {currentAssignedDept})</option>
+                            {(AGENTS_BY_DEPARTMENT[currentAssignedDept] || []).map((agent) => (
+                              <option key={agent} value={agent}>
+                                {agent}
+                              </option>
                             ))}
                           </select>
                         </div>
+                        {!canAssign && (
+                          <p className="mt-1 text-[11px] text-slate-400">
+                            Apenas a presidência e diretoria atribuem atendentes.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -333,6 +342,9 @@ function DrawerContent({
                       {ticket.description}
                     </p>
                   </section>
+
+                  {/* Anexos vinculados ao chamado (Seção 11) */}
+                  <TicketAttachmentsList ticketId={ticket.id} />
                 </div>
               )}
             </div>

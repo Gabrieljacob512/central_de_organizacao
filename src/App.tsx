@@ -1,22 +1,20 @@
-import { Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AuditLogsModal } from './components/audit/AuditLogsModal';
+import { AuditView } from './components/audit/AuditView';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { ChangePasswordModal } from './components/auth/ChangePasswordModal';
 import { CalendarView } from './components/calendar/CalendarView';
 import { Header } from './components/layout/Header';
 import { Sidebar } from './components/layout/Sidebar';
-import { MetricsCards } from './components/metrics/MetricsCards';
-import { MetricsDashboard } from './components/metrics/MetricsDashboard';
-import { KanbanBoard } from './components/tickets/KanbanBoard';
+import { ExecutiveDashboardView } from './components/metrics/ExecutiveDashboardView';
+import { OverviewView } from './components/overview/OverviewView';
+import { SettingsView } from './components/settings/SettingsView';
+import { MyTicketsView } from './components/tickets/MyTicketsView';
 import { TicketDetailsDrawer } from './components/tickets/TicketDetailsDrawer';
 import { TicketFormModal } from './components/tickets/TicketFormModal';
-import { TicketTable } from './components/tickets/TicketTable';
-import { Toolbar } from './components/tickets/Toolbar';
+import { UnifiedTicketsView } from './components/tickets/UnifiedTicketsView';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
-import { EmptyState } from './components/ui/EmptyState';
 import { KnowledgeBaseModal } from './components/knowledge/KnowledgeBaseModal';
-import { LgpdModal } from './components/lgpd/LgpdModal';
 import { NotificationPreferencesModal } from './components/notifications/NotificationPreferencesModal';
 import { UserManagementModal } from './components/users/UserManagementModal';
 import { PersonalWorkspaceView } from './components/workspace/PersonalWorkspaceView';
@@ -33,17 +31,31 @@ import { useNow } from './hooks/useUi';
 import { loadViewMode, saveViewMode } from './services/storage';
 import type { AuthorRole, Department, Status, Ticket, TicketFormData, ViewMode } from './types/ticket';
 import { formatDateTime, formatLongDate } from './utils/format';
-import { canDeleteTicket, canManageUsers, filterTicketsForUser, getUserRoleBadgeInfo, isPresident } from './utils/rbac';
+import { canDeleteTicket, canManageUsers, canViewAudit, filterTicketsForUser, getUserRoleBadgeInfo, isPresident } from './utils/rbac';
+
+const VIEW_TITLES: Record<ViewMode, string> = {
+  overview: 'Visão Geral das Solicitações',
+  tickets: 'Central de Chamados',
+  'my-tickets': 'Meus Chamados',
+  metrics: 'Painel Executivo & Métricas',
+  workspace: 'Espaço Privado de Organização',
+  calendar: 'Calendário Corporativo & Pessoal',
+  audit: 'Trilha de Auditoria & Governança',
+  settings: 'Configurações do Sistema',
+  table: 'Central de Chamados',
+  kanban: 'Central de Chamados',
+};
 
 /**
  * Componente raiz: orquestra autenticação (Auth Guard), hierarquia de permissões (RBAC),
- * isolamento setorial de chamados por departamento, drawer lateral de navegação e configurações.
+ * isolamento setorial nos 4 departamentos (Financeiro, RH, Marketing e Projetos),
+ * e alternância fluida entre as 10 telas e módulos da plataforma.
  */
 export default function App() {
   const toast = useToast();
   const now = useNow();
 
-  // Autenticação e Gestão de Usuário Ativo (Requisito 1 & 2)
+  // Autenticação e Gestão de Usuário Ativo
   const {
     currentUser,
     usersList,
@@ -52,6 +64,7 @@ export default function App() {
     deleteUser,
     resetPassword,
     changePassword,
+    updateCurrentUser,
     logout,
   } = useCurrentUser();
 
@@ -66,45 +79,32 @@ export default function App() {
     }
   }, [currentUser?.mustChangePassword, toast]);
 
-  // Trilha de Auditoria (Requisito 2 & 4)
+  // Trilha de Auditoria
   const { logs: auditLogs, addAuditLog, clearLogs: clearAuditLogs } = useAuditLogs();
   const [auditModalOpen, setAuditModalOpen] = useState(false);
 
   // Chamados brutos
-  const { tickets, createTicket, updateTicket, changeStatus, assignTicket, addComment, deleteTicket, resetData } =
+  const { tickets, createTicket, updateTicket, changeStatus, assignTicket, addComment, deleteTicket } =
     useTickets(currentUser, addAuditLog);
 
-  // 3. ISOLAMENTO DE CHAMADOS POR DEPARTAMENTO (Requisito 3)
+  // ISOLAMENTO DE CHAMADOS POR DEPARTAMENTO
   // Membros e Diretores só visualizam chamados do seu próprio departamento.
-  // Presidente (Admin) tem permissão irrestrita para ver TODOS os chamados de todos os setores.
+  // Presidente tem permissão irrestrita para ver TODOS os chamados.
   const visibleTickets = useMemo(() => {
     return filterTicketsForUser(tickets, currentUser);
   }, [tickets, currentUser]);
 
-  const { filters, updateFilter, resetFilters, filtered, activeFilterCount } = useTicketFilters(visibleTickets);
-  const [myTicketsOnly, setMyTicketsOnly] = useState(false);
-
-  const displayTickets = useMemo(() => {
-    if (!myTicketsOnly) return filtered;
-    return filtered.filter(
-      (t) =>
-        t.assignee === currentUser?.name ||
-        t.requester === currentUser?.name ||
-        t.email === currentUser?.email
-    );
-  }, [filtered, myTicketsOnly, currentUser]);
+  const { filters, updateFilter, resetFilters, activeFilterCount } = useTicketFilters(visibleTickets);
 
   const [view, setView] = useState<ViewMode>(loadViewMode);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Ticket | null>(null);
-  const [resetOpen, setResetOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifPreferencesOpen, setNotifPreferencesOpen] = useState(false);
   const [kbModalOpen, setKbModalOpen] = useState(false);
-  const [lgpdModalOpen, setLgpdModalOpen] = useState(false);
 
-  // 5. Espaço Privado e Calendário do Usuário (Requisitos 1, 2 e 3)
+  // Espaço Privado e Calendário do Usuário
   const {
     notes,
     tasks,
@@ -143,16 +143,23 @@ export default function App() {
     saveViewMode(view);
   }, [view]);
 
+  // Proteção da tela de auditoria contra acessos indevidos
+  useEffect(() => {
+    if (view === 'audit' && !canViewAudit(currentUser)) {
+      toast.error('Acesso negado', 'Apenas Diretores e o Presidente possuem permissão para visualizar auditoria.');
+    }
+  }, [view, currentUser, toast]);
+
   /* ----------------------------- Handlers ----------------------------- */
 
   const handleCreate = useCallback(
-    (data: TicketFormData) => {
+    (data: TicketFormData): Ticket => {
       const ticket = createTicket(data);
-      setCreateOpen(false);
       toast.success(
         `Chamado ${ticket.id} aberto com sucesso`,
         `Atribuído ao setor de ${ticket.assignedDepartment ?? ticket.department} com SLA até ${formatDateTime(ticket.slaDueAt)}.`,
       );
+      return ticket;
     },
     [createTicket, toast],
   );
@@ -220,17 +227,18 @@ export default function App() {
     setDeleteTarget(null);
   }, [deleteTarget, canDelete, deleteTicket, selectedId, toast]);
 
-  const handleConfirmReset = useCallback(() => {
-    resetData();
-    resetFilters();
-    setSelectedId(null);
-    setResetOpen(false);
-    toast.info('Dados de demonstração restaurados', 'Os chamados de exemplo foram recarregados com sucesso.');
-  }, [resetData, resetFilters, toast]);
+  const handleViewChange = useCallback(
+    (targetView: ViewMode) => {
+      if (targetView === 'audit' && !canViewAudit(currentUser)) {
+        toast.error('Acesso negado', 'Apenas Diretores e o Presidente possuem permissão para visualizar auditoria.');
+        return;
+      }
+      setView(targetView);
+    },
+    [currentUser, toast],
+  );
 
-  const openTicket = useCallback((ticket: Ticket) => setSelectedId(ticket.id), []);
-
-  /* ---------------------- AUTH GUARD (Requisito 1) ---------------------- */
+  /* ---------------------- AUTH GUARD ---------------------- */
 
   if (!currentUser) {
     return (
@@ -247,27 +255,17 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f8fafc] text-slate-800 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
-      {/* 4. Menu Lateral Expansível (Slide Drawer) com Seção de Configurações */}
+      {/* Menu Lateral Retrátil (10 Itens Obrigatórios) */}
       <Sidebar
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         currentUser={currentUser}
         view={view}
-        onViewChange={setView}
-        onOpenAuditLogs={() => setAuditModalOpen(true)}
-        onResetData={() => setResetOpen(true)}
-        onOpenChangePassword={() => setChangePasswordOpen(true)}
-        onOpenUserManagement={() => setUserManagementOpen(true)}
-        onOpenKnowledgeBase={() => setKbModalOpen(true)}
-        onExportCalendarIcs={() => {
-          exportCalendarToIcs(allEvents);
-          toast.success('Calendário Exportado', 'O arquivo .ics foi gerado com sucesso.');
-        }}
-        onOpenLgpdModal={() => setLgpdModalOpen(true)}
+        onViewChange={handleViewChange}
         onLogout={logout}
       />
 
-      {/* 4. Cabeçalho com Sino de Notificações em Tempo Real */}
+      {/* Cabeçalho com Sino de Notificações em Tempo Real */}
       <Header
         onToggleSidebar={() => setSidebarOpen(true)}
         onNewTicket={() => setCreateOpen(true)}
@@ -278,7 +276,7 @@ export default function App() {
         onOpenPreferences={() => setNotifPreferencesOpen(true)}
       />
 
-      {/* Conteúdo Principal de Trabalho (100% de largura) */}
+      {/* Conteúdo Principal de Trabalho */}
       <main className="mx-auto w-full max-w-[1600px] flex-1 space-y-5 px-4 py-6 sm:px-6 lg:px-8">
         {/* Saudação, Contexto e Badges de Hierarquia RBAC */}
         <div className="flex flex-col gap-1">
@@ -287,11 +285,7 @@ export default function App() {
           </p>
           <div className="flex flex-wrap items-center gap-2.5 mt-0.5">
             <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white">
-              {view === 'calendar'
-                ? 'Calendário Corporativo & Pessoal'
-                : view === 'workspace'
-                ? 'Espaço Privado de Organização'
-                : 'Visão Geral das Solicitações'}
+              {VIEW_TITLES[view] ?? 'Central de Chamados'}
             </h2>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold shadow-2xs ${roleBadge.badgeClass}`}
@@ -306,7 +300,78 @@ export default function App() {
           </div>
         </div>
 
-        {/* 1. MÓDULO DE CALENDÁRIO (Requisito 2 e 3) */}
+        {/* 1. Visão Geral das Solicitações */}
+        {view === 'overview' && (
+          <OverviewView
+            tickets={visibleTickets}
+            currentUser={currentUser}
+            now={now}
+            onNavigate={handleViewChange}
+            onSelectTicket={(id) => setSelectedId(id)}
+            onNewTicket={() => setCreateOpen(true)}
+            onOpenKnowledgeBase={() => setKbModalOpen(true)}
+            onExportCalendarIcs={() => {
+              exportCalendarToIcs(allEvents);
+              toast.success('Calendário Exportado', 'O arquivo .ics foi gerado com sucesso.');
+            }}
+          />
+        )}
+
+        {/* 2. Chamados Unificado (Lista ou Kanban) */}
+        {(view === 'tickets' || view === 'table' || view === 'kanban') && (
+          <UnifiedTicketsView
+            tickets={visibleTickets}
+            currentUser={currentUser}
+            now={now}
+            filters={filters}
+            onFilterChange={updateFilter}
+            onResetFilters={resetFilters}
+            activeFilterCount={activeFilterCount}
+            onSelectTicket={(id) => setSelectedId(id)}
+            onRequestDelete={setDeleteTarget}
+            onChangeStatus={handleChangeStatus}
+            onNewTicket={() => setCreateOpen(true)}
+            initialViewMode={view === 'kanban' ? 'kanban' : 'table'}
+          />
+        )}
+
+        {/* 3. Meus Chamados */}
+        {view === 'my-tickets' && (
+          <MyTicketsView
+            tickets={visibleTickets}
+            currentUser={currentUser}
+            now={now}
+            onSelectTicket={(id) => setSelectedId(id)}
+            onNewTicket={() => setCreateOpen(true)}
+          />
+        )}
+
+        {/* 4. Painel Executivo & Métricas */}
+        {view === 'metrics' && (
+          <ExecutiveDashboardView
+            tickets={visibleTickets}
+            currentUser={currentUser}
+            now={now}
+          />
+        )}
+
+        {/* 5. Espaço Privado do Usuário */}
+        {view === 'workspace' && (
+          <PersonalWorkspaceView
+            currentUser={currentUser}
+            notes={notes}
+            tasks={tasks}
+            privateEvents={privateEvents}
+            updatedAt={workspaceUpdatedAt}
+            onUpdateNotes={updateNotes}
+            onAddTask={addTask}
+            onToggleTask={toggleTask}
+            onDeleteTask={deleteTask}
+            onNavigateToCalendar={() => setView('calendar')}
+          />
+        )}
+
+        {/* 6. Módulo de Calendário */}
         {view === 'calendar' && (
           <CalendarView
             currentUser={currentUser}
@@ -336,134 +401,36 @@ export default function App() {
           />
         )}
 
-        {/* 2. ESPAÇO PRIVADO DO USUÁRIO (Requisito 1) */}
-        {view === 'workspace' && (
-          <PersonalWorkspaceView
+        {/* 7. Trilha de Auditoria */}
+        {view === 'audit' && (
+          <AuditView
             currentUser={currentUser}
-            notes={notes}
-            tasks={tasks}
-            privateEvents={privateEvents}
-            updatedAt={workspaceUpdatedAt}
-            onUpdateNotes={updateNotes}
-            onAddTask={addTask}
-            onToggleTask={toggleTask}
-            onDeleteTask={deleteTask}
-            onNavigateToCalendar={() => setView('calendar')}
+            logs={auditLogs}
+            onClearLogs={clearAuditLogs}
+            onNavigateHome={() => setView('overview')}
           />
         )}
 
-        {/* 3. MÓDULO DE CHAMADOS (LISTA OU KANBAN) */}
-        {(view === 'table' || view === 'kanban') && (
-          <>
-            {/* Filtros Ativos Indicadores */}
-            {filters.status !== 'all' ||
-            filters.department !== 'all' ||
-            (isPresidentUser && filters.assignedDepartment && filters.assignedDepartment !== 'all') ? (
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="text-slate-500 dark:text-slate-400">Filtrando por:</span>
-                {filters.status !== 'all' && (
-                  <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 font-semibold text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300">
-                    Status: {filters.status}
-                  </span>
-                )}
-                {isPresidentUser && filters.assignedDepartment && filters.assignedDepartment !== 'all' && (
-                  <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-300">
-                    Setor Resp: {filters.assignedDepartment}
-                  </span>
-                )}
-                {filters.department !== 'all' && (
-                  <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300">
-                    Origem: {filters.department}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="font-medium text-blue-600 hover:underline ml-1 dark:text-blue-400 cursor-pointer"
-                >
-                  Limpar
-                </button>
-              </div>
-            ) : null}
-
-            {/* Cards de Métricas (Calculados com base nos chamados visíveis do setor / empresa) */}
-            <MetricsCards tickets={visibleTickets} now={now} />
-
-            {/* Painel Gráfico Executivo com Recharts (Fase 5) */}
-            <MetricsDashboard tickets={visibleTickets} now={now} />
-
-            {/* Barra de Busca e Filtros com Isolamento de Setor */}
-            <Toolbar
-              filters={filters}
-              onFilterChange={updateFilter}
-              onReset={resetFilters}
-              activeFilterCount={activeFilterCount}
-              view={view}
-              onViewChange={setView}
-              resultCount={displayTickets.length}
-              totalCount={visibleTickets.length}
-              currentUser={currentUser}
-              myTicketsOnly={myTicketsOnly}
-              onToggleMyTickets={() => setMyTicketsOnly((prev) => !prev)}
-            />
-
-            {/* Exibição Tabela ou Kanban com Controle de Permissão de Exclusão (Requisito 2 & 3) */}
-            {displayTickets.length === 0 ? (
-              visibleTickets.length === 0 ? (
-                <EmptyState
-                  title={`Nenhum chamado no setor de ${currentUser.department}`}
-                  description={
-                    isPresidentUser
-                      ? 'Abra o primeiro chamado de suporte ou restaure os dados de demonstração pelo menu lateral.'
-                      : `Seu departamento de ${currentUser.department} não possui nenhum chamado atribuído no momento.`
-                  }
-                  action={
-                    <button type="button" className="btn-primary min-h-[44px]" onClick={() => setCreateOpen(true)}>
-                      <Plus className="h-4 w-4" /> Abrir novo chamado
-                    </button>
-                  }
-                />
-              ) : (
-                <EmptyState
-                  title={myTicketsOnly ? 'Nenhum chamado atribuído a você' : 'Nenhum chamado encontrado'}
-                  description={
-                    myTicketsOnly
-                      ? 'Você não possui chamados sob sua responsabilidade direta no momento.'
-                      : 'Nenhum resultado corresponde à busca e aos filtros selecionados. Ajuste os critérios ou limpe os filtros.'
-                  }
-                  action={
-                    <button
-                      type="button"
-                      className="btn-secondary min-h-[44px]"
-                      onClick={() => {
-                        resetFilters();
-                        setMyTicketsOnly(false);
-                      }}
-                    >
-                      Limpar filtros aplicados
-                    </button>
-                  }
-                />
-              )
-            ) : view === 'table' ? (
-              <TicketTable
-                tickets={displayTickets}
-                now={now}
-                onOpen={openTicket}
-                onDelete={setDeleteTarget}
-                canDelete={canDelete}
-              />
-            ) : (
-              <KanbanBoard
-                tickets={displayTickets}
-                now={now}
-                onOpen={openTicket}
-                onChangeStatus={handleChangeStatus}
-                onDelete={setDeleteTarget}
-                canDelete={canDelete}
-              />
-            )}
-          </>
+        {/* 8. Configurações do Sistema */}
+        {view === 'settings' && (
+          <SettingsView
+            currentUser={currentUser}
+            onProfileUpdated={(updated) => {
+              updateCurrentUser(updated);
+              addAuditLog({
+                action: 'ALTERACAO_PERFIL',
+                performedBy: `${updated.name} [${updated.role}] (${updated.email})`,
+                details: `Perfil de ${updated.name} atualizado.`,
+              });
+            }}
+            onPasswordChanged={() => {
+              addAuditLog({
+                action: 'ALTERACAO_PERFIL',
+                performedBy: `${currentUser.name} [${currentUser.role}] (${currentUser.email})`,
+                details: 'Senha de acesso alterada.',
+              });
+            }}
+          />
         )}
       </main>
 
@@ -471,13 +438,13 @@ export default function App() {
         Tecno System · Sistema de Service Desk & Gestão de Incidentes · PostgreSQL, Supabase RLS & Edge Functions
       </footer>
 
-      {/* Modais e Painéis */}
+      {/* Modais e Painéis Auxiliares */}
       <TicketFormModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={handleCreate}
         currentUser={currentUser}
-        onOpenUserModal={() => {}}
+        onOpenUserModal={() => setUserManagementOpen(true)}
       />
 
       <TicketDetailsDrawer
@@ -513,17 +480,7 @@ export default function App() {
         )}
       </ConfirmDialog>
 
-      <ConfirmDialog
-        open={resetOpen}
-        variant="warning"
-        title="Restaurar dados de demonstração"
-        message="Todos os chamados atuais serão substituídos pelos chamados de exemplo. Esta ação não pode ser desfeita."
-        confirmLabel="Restaurar"
-        onConfirm={handleConfirmReset}
-        onCancel={() => setResetOpen(false)}
-      />
-
-      {/* Modal de Alteração de Senha (Requisito 4) */}
+      {/* Modal de Alteração de Senha */}
       <ChangePasswordModal
         open={changePasswordOpen}
         onClose={() => setChangePasswordOpen(false)}
@@ -532,7 +489,7 @@ export default function App() {
         onSuccessToast={toast.success}
       />
 
-      {/* Modal de Gerenciamento de Colaboradores (Exclusivo para Presidente e Diretor de RH - Requisito 2) */}
+      {/* Modal de Gerenciamento de Colaboradores (Exclusivo para Presidente e Diretor de RH) */}
       {canManageUsers(currentUser) && (
         <UserManagementModal
           open={userManagementOpen}
@@ -564,7 +521,7 @@ export default function App() {
         />
       )}
 
-      {/* Modal de Trilha de Auditoria (Requisito 4) */}
+      {/* Modal de Trilha de Auditoria (Acesso rápido opcional) */}
       <AuditLogsModal
         open={auditModalOpen}
         onClose={() => setAuditModalOpen(false)}
@@ -572,26 +529,17 @@ export default function App() {
         onClearLogs={clearAuditLogs}
       />
 
-      {/* Modal de Preferências de Notificação (Fase 4) */}
+      {/* Modal de Preferências de Notificação */}
       <NotificationPreferencesModal
         open={notifPreferencesOpen}
         onClose={() => setNotifPreferencesOpen(false)}
       />
 
-      {/* Modal da Base de Conhecimento (Fase 6) */}
+      {/* Modal da Base de Conhecimento */}
       <KnowledgeBaseModal
         open={kbModalOpen}
         onClose={() => setKbModalOpen(false)}
       />
-
-      {/* Modal de Privacidade e Anonimização LGPD (Fase 6) */}
-      <LgpdModal
-        open={lgpdModalOpen}
-        currentUser={currentUser}
-        onClose={() => setLgpdModalOpen(false)}
-        onLoggedOut={logout}
-      />
     </div>
   );
 }
-

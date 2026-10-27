@@ -191,53 +191,48 @@ export function Toolbar({
       <div
         className={`${
           mobileFiltersOpen ? 'grid' : 'hidden'
-        } mt-3 animate-fade-in grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid lg:grid-cols-5`}
+        } mt-3 animate-fade-in grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid ${
+          isPresidentUser ? 'lg:grid-cols-5' : 'lg:grid-cols-3'
+        }`}
       >
-        {/* Setor Responsável (Isolamento por Departamento) */}
-        {isPresidentUser ? (
-          <FilterSelect
-            id="filter-assigned-department"
-            label="Setor Responsável"
-            icon={Users}
-            value={filters.assignedDepartment ?? 'all'}
-            active={Boolean(filters.assignedDepartment && filters.assignedDepartment !== 'all')}
-            onChange={(value) => onFilterChange('assignedDepartment', value as Department | 'all')}
-          >
-            <option value="all">Setor Responsável: Todos</option>
-            {DEPARTMENTS.map((dept) => (
-              <option key={dept} value={dept}>
-                Resp: {dept}
-              </option>
-            ))}
-          </FilterSelect>
-        ) : (
-          <div className="relative block min-w-0">
-            <Users className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-indigo-600 dark:text-indigo-400" />
-            <div
-              className="flex w-full min-h-[44px] sm:min-h-[38px] items-center rounded-xl border border-indigo-200 bg-indigo-50/70 py-2 pr-3 pl-9 text-xs sm:text-sm font-semibold text-indigo-900 shadow-2xs dark:border-indigo-900/60 dark:bg-indigo-950/60 dark:text-indigo-200"
-              title="Isolamento de Departamento ativo: Você visualiza apenas os chamados enviados para seu setor."
+        {/* Filtros Departamentais: EXCLUSIVOS DO PRESIDENTE (Seção 7) */}
+        {isPresidentUser && (
+          <>
+            {/* Setor Responsável */}
+            <FilterSelect
+              id="filter-assigned-department"
+              label="Setor Responsável"
+              icon={Users}
+              value={filters.assignedDepartment ?? 'all'}
+              active={Boolean(filters.assignedDepartment && filters.assignedDepartment !== 'all')}
+              onChange={(value) => onFilterChange('assignedDepartment', value as Department | 'all')}
             >
-              <span className="truncate">Setor: {currentUser?.department} (Isolado)</span>
-            </div>
-          </div>
-        )}
+              <option value="all">Setor Responsável: Todos</option>
+              {DEPARTMENTS.map((dept) => (
+                <option key={dept} value={dept}>
+                  Resp: {dept}
+                </option>
+              ))}
+            </FilterSelect>
 
-        {/* Departamento de Origem */}
-        <FilterSelect
-          id="filter-department"
-          label="Origem do Solicitante"
-          icon={Building2}
-          value={filters.department}
-          active={filters.department !== 'all'}
-          onChange={(value) => onFilterChange('department', value as TicketFilters['department'])}
-        >
-          <option value="all">Origem: Todos</option>
-          {DEPARTMENTS.map((department) => (
-            <option key={department} value={department}>
-              Origem: {department}
-            </option>
-          ))}
-        </FilterSelect>
+            {/* Departamento de Origem */}
+            <FilterSelect
+              id="filter-department"
+              label="Origem do Solicitante"
+              icon={Building2}
+              value={filters.department}
+              active={filters.department !== 'all'}
+              onChange={(value) => onFilterChange('department', value as TicketFilters['department'])}
+            >
+              <option value="all">Origem: Todos</option>
+              {DEPARTMENTS.map((department) => (
+                <option key={department} value={department}>
+                  Origem: {department}
+                </option>
+              ))}
+            </FilterSelect>
+          </>
+        )}
 
         {/* Status */}
         <FilterSelect

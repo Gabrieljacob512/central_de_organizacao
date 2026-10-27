@@ -57,7 +57,7 @@ export function buildSeedGlobalEvents(): CalendarEvent[] {
     },
     {
       id: `evt-seed-03`,
-      title: 'Workshop de Boas Práticas & Segurança LGPD',
+      title: 'Workshop de Boas Práticas & Segurança da Informação',
       description: 'Treinamento obrigatório de conformidade e segurança da informação conduzido pelo time de TI e RH.',
       date: formatDay(d3),
       time: '15:00',
