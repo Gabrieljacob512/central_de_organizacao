@@ -64,12 +64,27 @@ export type EventType = 'created' | 'comment' | 'status' | 'assignment' | 'updat
 /** Papel de quem gerou o evento. */
 export type AuthorRole = 'solicitante' | 'atendente' | 'sistema';
 
+export interface CommentAttachment {
+  id: string;
+  fileName: string;
+  sizeBytes: number;
+  mimeType: string;
+  storagePath: string;
+  signedUrl?: string;
+  description?: string | null;
+}
+
 export interface TicketEvent {
   id: string;
   type: EventType;
   author: string;
+  authorId?: string;
   role: AuthorRole;
   message: string;
+  visibility?: 'public' | 'internal';
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  attachments?: CommentAttachment[];
   createdAt: string;
 }
 
