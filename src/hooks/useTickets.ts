@@ -2,6 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { SERVICE_DESK_NAME } from '../constants/config';
 import { buildSeedTickets } from '../data/seed';
 import { loadTickets, saveTickets } from '../services/storage';
+import {
+  fetchTickets,
+  createTicket as createTicketInDb,
+  updateTicket as updateTicketInDb,
+  deleteTicket as deleteTicketInDb,
+} from '../services/ticketService';
 import type {
   ActionResult,
   AuditLog,
@@ -20,7 +26,7 @@ import { validateTransition } from '../utils/workflow';
 
 /**
  * Hook central de estado dos chamados (CRUD + histórico + trilha de auditoria).
- * Toda alteração é persistida automaticamente no LocalStorage.
+ * Toda alteração é sincronizada com o Supabase e persistida no LocalStorage como cache.
  */
 
 const FIELD_LABELS: Record<keyof TicketFormData, string> = {
@@ -65,6 +71,26 @@ export function useTickets(
 ) {
   const [tickets, setTickets] = useState<Ticket[]>(loadTickets);
 
+  // Sincroniza os chamados do banco de dados (respeitando o RLS do usuário ativo)
+  useEffect(() => {
+    let mounted = true;
+    fetchTickets()
+      .then((dbTickets) => {
+        if (!mounted) return;
+        if (dbTickets.length > 0) {
+          setTickets(dbTickets);
+          saveTickets(dbTickets);
+        }
+      })
+      .catch((err) => {
+        console.warn('[useTickets] Erro ao carregar chamados do Supabase:', err);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentUser?.id]);
+
   useEffect(() => {
     saveTickets(tickets);
   }, [tickets]);
@@ -89,8 +115,9 @@ export function useTickets(
         history.push(makeEvent('assignment', SERVICE_DESK_NAME, 'sistema', `Chamado atribuído a ${fields.assignee}.`));
       }
 
+      const tempId = generateTicketId(tickets);
       const ticket: Ticket = {
-        id: generateTicketId(tickets),
+        id: tempId,
         ...fields,
         status: 'Aberto',
         createdAt: nowIso,
@@ -101,6 +128,17 @@ export function useTickets(
       };
 
       setTickets((prev) => [ticket, ...prev]);
+
+      // Persiste no Supabase
+      createTicketInDb(data)
+        .then((res) => {
+          if (res.success && res.ticket) {
+            setTickets((prev) => prev.map((t) => (t.id === tempId ? res.ticket! : t)));
+          }
+        })
+        .catch((err) => {
+          console.error('[useTickets] Erro ao salvar chamado no Supabase:', err);
+        });
 
       onAudit?.({
         ticketId: ticket.id,
@@ -153,6 +191,18 @@ export function useTickets(
         slaDueAt: changed.includes('priority') ? computeSlaDueAt(current.createdAt, next.priority) : current.slaDueAt,
         updatedAt: new Date().toISOString(),
         history: [...current.history, ...events],
+      });
+
+      // Sincroniza atualização no Supabase
+      updateTicketInDb(id, {
+        title: next.title,
+        description: next.description,
+        priority: next.priority,
+        department: next.department,
+        assignedDepartment: next.assignedDepartment,
+        assignee: next.assignee,
+      }).catch((err) => {
+        console.error('[useTickets] Erro ao atualizar chamado no Supabase:', err);
       });
 
       // Auditoria de mudanças específicas
@@ -211,6 +261,11 @@ export function useTickets(
         history: [...current.history, makeEvent('status', current.assignee ?? SERVICE_DESK_NAME, 'sistema', message)],
       });
 
+      // Sincroniza no Supabase (triggers cuidam da auditoria e recalculo de SLA)
+      updateTicketInDb(id, { status: to }).catch((err) => {
+        console.error('[useTickets] Erro ao sincronizar status no Supabase:', err);
+      });
+
       if (isResolving) {
         onAudit?.({
           ticketId: current.id,
@@ -267,6 +322,10 @@ export function useTickets(
         history: [...current.history, makeEvent('assignment', SERVICE_DESK_NAME, 'sistema', message)],
       });
 
+      updateTicketInDb(id, { assignee, assignedDepartment }).catch((err) => {
+        console.error('[useTickets] Erro ao sincronizar atribuição no Supabase:', err);
+      });
+
       onAudit?.({
         ticketId: current.id,
         ticketTitle: current.title,
@@ -315,6 +374,10 @@ export function useTickets(
 
       setTickets((prev) => prev.filter((ticket) => ticket.id !== id));
 
+      deleteTicketInDb(id).catch((err) => {
+        console.error('[useTickets] Erro ao excluir chamado no Supabase:', err);
+      });
+
       onAudit?.({
         ticketId: target.id,
         ticketTitle: target.title,
@@ -330,7 +393,16 @@ export function useTickets(
 
   /** Restaura os dados de demonstração (Seed Data). */
   const resetData = useCallback(() => {
-    setTickets(buildSeedTickets());
+    fetchTickets().then((dbTickets) => {
+      if (dbTickets.length > 0) {
+        setTickets(dbTickets);
+        saveTickets(dbTickets);
+      } else {
+        const seed = buildSeedTickets();
+        setTickets(seed);
+        saveTickets(seed);
+      }
+    });
   }, []);
 
   return { tickets, createTicket, updateTicket, changeStatus, assignTicket, addComment, deleteTicket, resetData };

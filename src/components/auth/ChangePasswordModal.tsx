@@ -7,7 +7,7 @@ interface ChangePasswordModalProps {
   open: boolean;
   onClose: () => void;
   currentUser: UserProfile | null;
-  onChangePassword: (newPassword: string) => { success: boolean; error?: string };
+  onChangePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }> | { success: boolean; error?: string };
   onSuccessToast: (title: string, message?: string) => void;
 }
 
@@ -21,10 +21,11 @@ export function ChangePasswordModal({
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   if (!open || !currentUser) return null;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -33,19 +34,29 @@ export function ChangePasswordModal({
       return;
     }
 
+    if (newPassword.length < 8) {
+      setErrorMsg('A nova senha deve possuir ao menos 8 caracteres.');
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       setErrorMsg('As senhas não coincidem. Digite novamente.');
       return;
     }
 
-    const result = onChangePassword(newPassword);
-    if (!result.success) {
-      setErrorMsg(result.error ?? 'Erro ao alterar senha.');
-    } else {
-      onSuccessToast('Senha alterada com sucesso!', 'Sua nova senha de acesso foi salva.');
-      setNewPassword('');
-      setConfirmPassword('');
-      onClose();
+    setLoading(true);
+    try {
+      const result = await onChangePassword(newPassword);
+      if (!result.success) {
+        setErrorMsg(result.error ?? 'Erro ao alterar senha.');
+      } else {
+        onSuccessToast('Senha alterada com sucesso!', 'Sua nova senha de acesso foi salva.');
+        setNewPassword('');
+        setConfirmPassword('');
+        onClose();
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -103,9 +114,9 @@ export function ChangePasswordModal({
           <button type="button" onClick={onClose} className="btn-secondary">
             Cancelar
           </button>
-          <button id="btn-save-new-password" type="submit" className="btn-primary">
+          <button id="btn-save-new-password" type="submit" disabled={loading} className="btn-primary disabled:opacity-50">
             <CheckCircle2 className="h-4 w-4" />
-            Salvar Nova Senha
+            {loading ? 'Salvando...' : 'Salvar Nova Senha'}
           </button>
         </div>
       </form>

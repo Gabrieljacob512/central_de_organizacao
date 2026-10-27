@@ -31,6 +31,9 @@ export interface UserProfile {
   department: Department;
   role: string;
   createdAt: string;
+  isActive?: boolean;
+  mustChangePassword?: boolean;
+  permissions?: string[];
 }
 
 /** Tipos de ações registradas na trilha de auditoria global. */

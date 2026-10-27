@@ -17,8 +17,8 @@ import { ThemeToggle } from '../ui/ThemeToggle';
 type AuthMode = 'login' | 'forgot';
 
 interface AuthScreenProps {
-  onLogin: (email: string, password: string) => AuthResult;
-  onResetPassword: (email: string, newPassword: string) => AuthResult;
+  onLogin: (email: string, password: string) => Promise<AuthResult> | AuthResult;
+  onResetPassword: (email: string, newPassword: string) => Promise<AuthResult> | AuthResult;
   onSuccess: (user: UserProfile) => void;
   showToast: {
     success: (title: string, message?: string) => void;
@@ -44,6 +44,7 @@ export function AuthScreen({
   const [mode, setMode] = useState<AuthMode>('login');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Formulário de Login
   const [loginEmail, setLoginEmail] = useState('');
@@ -55,7 +56,7 @@ export function AuthScreen({
 
   /* ------------------------------- Handlers ------------------------------- */
 
-  const handleLoginSubmit = (e: FormEvent) => {
+  const handleLoginSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -64,16 +65,21 @@ export function AuthScreen({
       return;
     }
 
-    const result = onLogin(loginEmail, loginPassword);
-    if (!result.success) {
-      setErrorMsg(result.error ?? 'Credenciais inválidas. Verifique seu e-mail e senha.');
-    } else if (result.user) {
-      showToast.success('Acesso autorizado', `Bem-vindo(a), ${result.user.name}!`);
-      onSuccess(result.user);
+    setLoading(true);
+    try {
+      const result = await onLogin(loginEmail, loginPassword);
+      if (!result.success) {
+        setErrorMsg(result.error ?? 'Credenciais inválidas. Verifique seu e-mail e senha.');
+      } else if (result.user) {
+        showToast.success('Acesso autorizado', `Bem-vindo(a), ${result.user.name}!`);
+        onSuccess(result.user);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleResetSubmit = (e: FormEvent) => {
+  const handleResetSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -82,33 +88,44 @@ export function AuthScreen({
       return;
     }
 
-    const result = onResetPassword(resetEmail, resetNewPassword);
-    if (!result.success) {
-      setErrorMsg(result.error ?? 'Falha ao redefinir a senha.');
-    } else {
-      showToast.success(
-        'Senha redefinida com sucesso!',
-        'Sua nova senha foi gravada. Use-a para entrar no sistema.',
-      );
-      setLoginEmail(resetEmail);
-      setLoginPassword(resetNewPassword);
-      setMode('login');
-      setErrorMsg(null);
+    setLoading(true);
+    try {
+      const result = await onResetPassword(resetEmail, resetNewPassword);
+      if (!result.success) {
+        setErrorMsg(result.error ?? 'Falha ao redefinir a senha.');
+      } else {
+        showToast.success(
+          'Solicitação enviada!',
+          'Se o e-mail estiver cadastrado, as instruções foram enviadas para sua caixa de entrada.',
+        );
+        setLoginEmail(resetEmail);
+        setMode('login');
+        setErrorMsg(null);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  /** Preenchimento e login rápido para contas de demonstração (Seed Users) */
-  const handleQuickSeed = (email: string, pass: string) => {
+  /** Preenchimento e login rápido para contas de demonstração (Seed Users em DEV) */
+  const handleQuickSeed = async (email: string, pass: string) => {
     setErrorMsg(null);
     setLoginEmail(email);
     setLoginPassword(pass);
-    const result = onLogin(email, pass);
-    if (result.success && result.user) {
-      showToast.success(
-        `Conectado como ${result.user.role}`,
-        `Sessão iniciada como ${result.user.name} (${result.user.department}).`,
-      );
-      onSuccess(result.user);
+    setLoading(true);
+    try {
+      const result = await onLogin(email, pass);
+      if (result.success && result.user) {
+        showToast.success(
+          `Conectado como ${result.user.role}`,
+          `Sessão iniciada como ${result.user.name} (${result.user.department}).`,
+        );
+        onSuccess(result.user);
+      } else {
+        setErrorMsg(result.error ?? 'Falha ao autenticar.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -259,52 +276,55 @@ export function AuthScreen({
               <button
                 id="btn-login-submit"
                 type="submit"
-                className="btn-primary w-full justify-center py-2.5 text-sm font-bold shadow-md shadow-blue-600/20"
+                disabled={loading}
+                className="btn-primary w-full justify-center py-2.5 text-sm font-bold shadow-md shadow-blue-600/20 disabled:opacity-50"
               >
-                <span>Acessar Plataforma</span>
+                <span>{loading ? 'Acessando...' : 'Acessar Plataforma'}</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
 
-              {/* Botões Rápidos para Contas de Demonstração (Seed Users Obrigatórios) */}
-              <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
-                <p className="text-center text-[11px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500 mb-2.5">
-                  Acesso rápido para testes (Seed Users)
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {/* 1. Presidente */}
-                  <button
-                    type="button"
-                    id="quick-login-presidente"
-                    onClick={() => handleQuickSeed('presidente@gmail.com', 'presidente123')}
-                    className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 p-2 text-center transition hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 cursor-pointer"
-                  >
-                    <span className="text-xs font-bold text-amber-900 dark:text-amber-200">👑 Presidente</span>
-                    <span className="text-[10px] text-amber-700 dark:text-amber-400">Diretoria (Vê tudo)</span>
-                  </button>
+              {/* Botões Rápidos para Contas de Demonstração (Exclusivo para Ambiente de Desenvolvimento) */}
+              {import.meta.env.DEV && (
+                <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+                  <p className="text-center text-[11px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500 mb-2.5">
+                    Acesso rápido para testes (Seed Dev)
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {/* 1. Presidente */}
+                    <button
+                      type="button"
+                      id="quick-login-presidente"
+                      onClick={() => handleQuickSeed('presidente@gmail.com', 'Presidente@2026')}
+                      className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 p-2 text-center transition hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 cursor-pointer"
+                    >
+                      <span className="text-xs font-bold text-amber-900 dark:text-amber-200">👑 Presidente</span>
+                      <span className="text-[10px] text-amber-700 dark:text-amber-400">Diretoria (Vê tudo)</span>
+                    </button>
 
-                  {/* 2. Diretor de RH */}
-                  <button
-                    type="button"
-                    id="quick-login-rh"
-                    onClick={() => handleQuickSeed('rh@tecnosystem.com', '123')}
-                    className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-purple-200 bg-purple-50/80 p-2 text-center transition hover:bg-purple-100 dark:border-purple-900/60 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 cursor-pointer"
-                  >
-                    <span className="text-xs font-bold text-purple-900 dark:text-purple-200">👔 Diretor RH</span>
-                    <span className="text-[10px] text-purple-700 dark:text-purple-400">RH (Cadastra usrs)</span>
-                  </button>
+                    {/* 2. Diretor de RH */}
+                    <button
+                      type="button"
+                      id="quick-login-rh"
+                      onClick={() => handleQuickSeed('rh@tecnosystem.com', 'Tecno@2026!')}
+                      className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-purple-200 bg-purple-50/80 p-2 text-center transition hover:bg-purple-100 dark:border-purple-900/60 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 cursor-pointer"
+                    >
+                      <span className="text-xs font-bold text-purple-900 dark:text-purple-200">👔 Diretor RH</span>
+                      <span className="text-[10px] text-purple-700 dark:text-purple-400">RH (Cadastra usrs)</span>
+                    </button>
 
-                  {/* 3. Membro de TI */}
-                  <button
-                    type="button"
-                    id="quick-login-ti"
-                    onClick={() => handleQuickSeed('ti@tecnosystem.com', '123')}
-                    className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-blue-200 bg-blue-50/80 p-2 text-center transition hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 cursor-pointer"
-                  >
-                    <span className="text-xs font-bold text-blue-900 dark:text-blue-200">💻 Membro TI</span>
-                    <span className="text-[10px] text-blue-700 dark:text-blue-400">TI (Setor isolado)</span>
-                  </button>
+                    {/* 3. Membro de TI */}
+                    <button
+                      type="button"
+                      id="quick-login-ti"
+                      onClick={() => handleQuickSeed('ti@tecnosystem.com', 'Tecno@2026!')}
+                      className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-blue-200 bg-blue-50/80 p-2 text-center transition hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 cursor-pointer"
+                    >
+                      <span className="text-xs font-bold text-blue-900 dark:text-blue-200">💻 Membro TI</span>
+                      <span className="text-[10px] text-blue-700 dark:text-blue-400">TI (Setor isolado)</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Informação sobre cadastro */}
               <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-center text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
@@ -381,10 +401,11 @@ export function AuthScreen({
               <button
                 id="btn-reset-submit"
                 type="submit"
-                className="btn-primary w-full justify-center py-2.5 text-sm font-bold shadow-md shadow-blue-600/20"
+                disabled={loading}
+                className="btn-primary w-full justify-center py-2.5 text-sm font-bold shadow-md shadow-blue-600/20 disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                <span>Salvar Nova Senha</span>
+                <span>{loading ? 'Enviando...' : 'Salvar Nova Senha'}</span>
               </button>
 
               <button

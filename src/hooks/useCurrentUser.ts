@@ -1,4 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  deactivateUser,
+  getCurrentUserProfile,
+  listAllUsers,
+  signIn,
+  signOut,
+  updatePassword,
+  sendPasswordResetEmail,
+} from '../services/authService';
 import { loadCurrentUser, loadUsersList, saveCurrentUser, saveUsersList } from '../services/storage';
 import type { Department, UserProfile } from '../types/ticket';
 import { generateId } from '../utils/id';
@@ -8,7 +17,7 @@ export interface RegisterUserData {
   name: string;
   email: string;
   departmentEmail?: string;
-  password: string;
+  password?: string;
   department: Department;
   role: string;
 }
@@ -20,38 +29,76 @@ export interface AuthResult {
 }
 
 /**
- * Hook central de autenticação, sessão do colaborador e lista de usuários cadastrados.
- * Persiste 'currentUser' e 'usersList' no LocalStorage com controle estrito de RBAC.
+ * Hook central de autenticação e sessão do colaborador integrado ao Supabase Auth e Postgres.
+ * Persiste cache sincronizado e valida permissões de acesso com segurança.
  */
 export function useCurrentUser() {
   const [usersList, setUsersList] = useState<UserProfile[]>(loadUsersList);
   const [currentUser, setCurrentUserState] = useState<UserProfile | null>(loadCurrentUser);
 
-  /** Realiza o login validando e-mail e senha */
+  // Sincroniza sessão ativa e lista de colaboradores com o Supabase ao iniciar
+  useEffect(() => {
+    let mounted = true;
+
+    getCurrentUserProfile()
+      .then((profile) => {
+        if (!mounted) return;
+        if (profile) {
+          setCurrentUserState(profile);
+          saveCurrentUser(profile);
+        } else {
+          // Se não há sessão ativa no Supabase, limpa o cache local
+          setCurrentUserState(null);
+          saveCurrentUser(null);
+        }
+      })
+      .catch((err) => {
+        console.warn('[useCurrentUser] Não foi possível restaurar sessão do Supabase:', err);
+      });
+
+    listAllUsers()
+      .then((users) => {
+        if (!mounted) return;
+        if (users.length > 0) {
+          setUsersList(users);
+          saveUsersList(users);
+        }
+      })
+      .catch((err) => {
+        console.warn('[useCurrentUser] Erro ao sincronizar colaboradores com Supabase:', err);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  /** Realiza o login corporativo com Supabase Auth */
   const login = useCallback(
-    (email: string, password: string): AuthResult => {
-      const cleanEmail = email.trim().toLowerCase();
-      const user = usersList.find((u) => u.email.toLowerCase() === cleanEmail);
-
-      if (!user) {
-        return { success: false, error: 'E-mail corporativo não encontrado no sistema.' };
+    async (email: string, pass: string): Promise<AuthResult> => {
+      const res = await signIn(email, pass);
+      if (!res.success || !res.user) {
+        return { success: false, error: res.error || 'Credenciais inválidas.' };
       }
 
-      const userPassword = user.password ?? '123';
-      if (userPassword !== password) {
-        return { success: false, error: 'Senha incorreta. Tente novamente ou use a recuperação de senha.' };
-      }
+      setCurrentUserState(res.user);
+      saveCurrentUser(res.user);
 
-      setCurrentUserState(user);
-      saveCurrentUser(user);
-      return { success: true, user };
+      // Atualiza a lista em background
+      listAllUsers().then((users) => {
+        if (users.length > 0) {
+          setUsersList(users);
+          saveUsersList(users);
+        }
+      });
+
+      return { success: true, user: res.user };
     },
-    [usersList],
+    [],
   );
 
   /**
    * Cadastro de Colaborador (Exclusivo para Presidente e Diretor de RH).
-   * Contém obrigatoriamente os 6 campos: Nome, E-mail, E-mail do Depto, Cargo, Depto e Senha.
    */
   const addUser = useCallback(
     (data: RegisterUserData): AuthResult => {
@@ -66,18 +113,14 @@ export function useCurrentUser() {
       const cleanEmail = data.email.trim().toLowerCase();
       const cleanDeptEmail = (data.departmentEmail || '').trim().toLowerCase();
       const cleanRole = data.role.trim();
-      const cleanPassword = data.password.trim();
 
-      if (!cleanName || !cleanEmail || !cleanDeptEmail || !cleanRole || !cleanPassword) {
+      if (!cleanName || !cleanEmail || !cleanRole) {
         return { success: false, error: 'Por favor, preencha todos os campos obrigatórios do colaborador.' };
       }
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(cleanEmail)) {
         return { success: false, error: 'O e-mail do usuário informado é inválido.' };
-      }
-      if (!emailRegex.test(cleanDeptEmail)) {
-        return { success: false, error: 'O e-mail do departamento informado é inválido.' };
       }
 
       const existing = usersList.find((u) => u.email.toLowerCase() === cleanEmail);
@@ -89,10 +132,10 @@ export function useCurrentUser() {
         id: `user-${generateId()}`,
         name: cleanName,
         email: cleanEmail,
-        departmentEmail: cleanDeptEmail,
-        password: cleanPassword,
+        departmentEmail: cleanDeptEmail || `${data.department.toLowerCase()}@tecnosystem.com`,
         department: data.department,
         role: cleanRole,
+        isActive: true,
         createdAt: new Date().toISOString(),
       };
 
@@ -106,14 +149,15 @@ export function useCurrentUser() {
   );
 
   /**
-   * Exclusão de Colaborador (Exclusivo para Presidente e Diretor de RH).
+   * Desativação de Colaborador (Exclusivo para Presidente e Diretor de RH).
+   * Usuários são desativados (is_active = false) e nunca excluídos, garantindo a auditoria.
    */
   const deleteUser = useCallback(
-    (userId: string): AuthResult => {
+    async (userId: string): Promise<AuthResult> => {
       if (!canManageUsers(currentUser)) {
         return {
           success: false,
-          error: 'Acesso negado. Apenas o Presidente e o Diretor de RH possuem permissão para excluir colaboradores.',
+          error: 'Acesso negado. Apenas o Presidente e o Diretor de RH possuem permissão para desativar colaboradores.',
         };
       }
 
@@ -122,20 +166,25 @@ export function useCurrentUser() {
         return { success: false, error: 'Colaborador não encontrado.' };
       }
 
-      // Impede auto-exclusão
+      // Impede auto-desativação
       if (currentUser?.id === userId) {
-        return { success: false, error: 'Você não pode excluir sua própria conta de acesso.' };
+        return { success: false, error: 'Você não pode desativar sua própria conta de acesso.' };
       }
 
-      // Impede exclusão do presidente raiz
+      // Impede desativação da conta do presidente raiz
       if (
         targetUser.email.toLowerCase() === 'presidente@gmail.com' ||
         targetUser.email.toLowerCase() === 'presidente@tecnosystem.com'
       ) {
-        return { success: false, error: 'A conta raiz do Presidente não pode ser excluída.' };
+        return { success: false, error: 'A conta raiz do Presidente não pode ser desativada.' };
       }
 
-      const updatedList = usersList.filter((u) => u.id !== userId);
+      const res = await deactivateUser(userId);
+      if (!res.success) {
+        return { success: false, error: res.error || 'Falha ao desativar usuário no banco de dados.' };
+      }
+
+      const updatedList = usersList.map((u) => (u.id === userId ? { ...u, isActive: false } : u));
       setUsersList(updatedList);
       saveUsersList(updatedList);
 
@@ -144,55 +193,40 @@ export function useCurrentUser() {
     [currentUser, usersList],
   );
 
-  /** Redefine a senha de um usuário pelo e-mail cadastrado */
+  /** Solicita redefinição de senha por e-mail corporativo via Supabase Auth */
   const resetPassword = useCallback(
-    (email: string, newPassword: string): AuthResult => {
+    async (email: string): Promise<AuthResult> => {
       const cleanEmail = email.trim().toLowerCase();
-      const userIndex = usersList.findIndex((u) => u.email.toLowerCase() === cleanEmail);
-
-      if (userIndex === -1) {
-        return { success: false, error: 'Nenhum usuário cadastrado com este e-mail corporativo.' };
+      const res = await sendPasswordResetEmail(cleanEmail);
+      if (!res.success) {
+        return { success: false, error: res.error || 'Falha ao enviar e-mail de redefinição.' };
       }
-
-      if (!newPassword.trim()) {
-        return { success: false, error: 'Por favor, informe a nova senha.' };
-      }
-
-      const updatedUser: UserProfile = {
-        ...usersList[userIndex],
-        password: newPassword.trim(),
-      };
-
-      const updatedList = [...usersList];
-      updatedList[userIndex] = updatedUser;
-
-      setUsersList(updatedList);
-      saveUsersList(updatedList);
-
-      if (currentUser?.email.toLowerCase() === cleanEmail) {
-        setCurrentUserState(updatedUser);
-        saveCurrentUser(updatedUser);
-      }
-
-      return { success: true, user: updatedUser };
+      return { success: true };
     },
-    [usersList, currentUser],
+    [],
   );
 
-  /** Atualiza a senha do usuário atualmente conectado */
+  /** Atualiza a senha do usuário atualmente conectado via Supabase Auth */
   const changePassword = useCallback(
-    (newPassword: string): AuthResult => {
+    async (newPassword: string): Promise<{ success: boolean; error?: string }> => {
       if (!currentUser) {
         return { success: false, error: 'Nenhum usuário autenticado no momento.' };
       }
 
-      return resetPassword(currentUser.email, newPassword);
+      const res = await updatePassword(newPassword);
+      if (res.success) {
+        const updated = { ...currentUser, mustChangePassword: false };
+        setCurrentUserState(updated);
+        saveCurrentUser(updated);
+      }
+      return res;
     },
-    [currentUser, resetPassword],
+    [currentUser],
   );
 
-  /** Encerra a sessão ativa do usuário (Logout) */
-  const logout = useCallback(() => {
+  /** Encerra a sessão ativa do usuário (Logout com Supabase Auth) */
+  const logout = useCallback(async () => {
+    await signOut();
     setCurrentUserState(null);
     saveCurrentUser(null);
   }, []);

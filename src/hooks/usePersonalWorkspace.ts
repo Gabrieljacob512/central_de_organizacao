@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { loadPrivateWorkspace, savePrivateWorkspace } from '../services/calendarStorage';
+import { fetchPrivateWorkspace, savePrivateNotesAndTasks } from '../services/workspaceService';
 import type { CalendarEvent, PersonalTask, PersonalWorkspaceData, TaskPriority } from '../types/calendar';
 import type { UserProfile } from '../types/ticket';
 import { generateId } from '../utils/id';
@@ -7,7 +8,7 @@ import { generateId } from '../utils/id';
 /**
  * Hook do Espaço Privado do Usuário (Requisito 1).
  * Carrega e persiste notas pessoais, checklist de tarefas e compromissos privados
- * vinculados estritamente à chave 'private_workspace_<userEmail>'.
+ * com isolamento estrito por RLS no Supabase.
  */
 export function usePersonalWorkspace(currentUser: UserProfile | null) {
   const email = currentUser?.email ?? '';
@@ -16,19 +17,39 @@ export function usePersonalWorkspace(currentUser: UserProfile | null) {
     loadPrivateWorkspace(email),
   );
 
-  // Recarrega sempre que o usuário ativo mudar
+  // Recarrega do cache e sincroniza com o banco de dados
   useEffect(() => {
     if (email) {
       setWorkspace(loadPrivateWorkspace(email));
     }
-  }, [email]);
+    if (currentUser?.id) {
+      let mounted = true;
+      fetchPrivateWorkspace()
+        .then((data) => {
+          if (!mounted) return;
+          if (data.notes || data.tasks.length > 0 || data.privateEvents.length > 0) {
+            setWorkspace(data);
+            savePrivateWorkspace(email, data);
+          }
+        })
+        .catch((err) => {
+          console.warn('[usePersonalWorkspace] Erro ao carregar notas do Supabase:', err);
+        });
+      return () => {
+        mounted = false;
+      };
+    }
+  }, [currentUser?.id, email]);
 
-  // Salva no localStorage isolado do usuário
+  // Salva no localStorage isolado do usuário e sincroniza com o banco
   const persist = useCallback(
     (updater: (prev: PersonalWorkspaceData) => PersonalWorkspaceData) => {
       setWorkspace((prev) => {
         const next = updater(prev);
         savePrivateWorkspace(email, next);
+        savePrivateNotesAndTasks(next.notes, next.tasks).catch((err) => {
+          console.error('[usePersonalWorkspace] Erro ao persistir notas no Supabase:', err);
+        });
         return next;
       });
     },

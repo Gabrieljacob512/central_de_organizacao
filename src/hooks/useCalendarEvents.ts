@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { loadGlobalEvents, saveGlobalEvents } from '../services/calendarStorage';
+import { fetchCalendarEvents, createCalendarEvent, deleteCalendarEvent as deleteCalendarEventInDb } from '../services/calendarService';
 import type { CalendarEvent, EventCategory, EventScope } from '../types/calendar';
 import type { UserProfile } from '../types/ticket';
 import { generateId } from '../utils/id';
@@ -36,6 +37,26 @@ export function useCalendarEvents({
   onDeletePrivateEvent,
 }: UseCalendarEventsProps) {
   const [globalEvents, setGlobalEvents] = useState<CalendarEvent[]>(loadGlobalEvents);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchCalendarEvents()
+      .then((events) => {
+        if (!mounted) return;
+        const globals = events.filter((e) => e.scope === 'global');
+        if (globals.length > 0) {
+          setGlobalEvents(globals);
+          saveGlobalEvents(globals);
+        }
+      })
+      .catch((err) => {
+        console.warn('[useCalendarEvents] Erro ao sincronizar eventos com Supabase:', err);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentUser?.id]);
 
   const canCreateGlobal = canManageGlobalEvents(currentUser);
 
@@ -86,6 +107,15 @@ export function useCalendarEvents({
         setGlobalEvents(updated);
         saveGlobalEvents(updated);
 
+        createCalendarEvent({
+          title: cleanTitle,
+          description: input.description?.trim() || undefined,
+          date: input.date,
+          time: input.time || undefined,
+          scope: 'global',
+          category: input.category,
+        }).catch((err) => console.error('[useCalendarEvents] Erro ao persistir evento:', err));
+
         return { success: true, event: newGlobalEvent };
       }
 
@@ -119,6 +149,7 @@ export function useCalendarEvents({
         const updated = globalEvents.filter((e) => e.id !== eventId);
         setGlobalEvents(updated);
         saveGlobalEvents(updated);
+        deleteCalendarEventInDb(eventId).catch((err) => console.error('[useCalendarEvents] Erro ao excluir evento:', err));
         return { success: true };
       }
 

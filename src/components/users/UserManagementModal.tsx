@@ -27,7 +27,7 @@ interface UserManagementModalProps {
   currentUser: UserProfile | null;
   usersList: UserProfile[];
   onAddUser: (data: RegisterUserData) => AuthResult;
-  onDeleteUser: (userId: string) => AuthResult;
+  onDeleteUser: (userId: string) => Promise<AuthResult> | AuthResult;
 }
 
 const COMMON_ROLES = [
@@ -146,14 +146,14 @@ export function UserManagementModal({
     setTab('list');
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
 
-    const result = onDeleteUser(deleteTarget.id);
+    const result = await onDeleteUser(deleteTarget.id);
     if (!result.success) {
-      toast.error('Não foi possível excluir', result.error ?? 'Falha ao remover colaborador.');
+      toast.error('Não foi possível desativar', result.error ?? 'Falha ao desativar colaborador.');
     } else {
-      toast.success('Colaborador removido', `${deleteTarget.name} foi removido(a) do sistema.`);
+      toast.success('Colaborador desativado', `${deleteTarget.name} foi desativado(a) no sistema.`);
     }
     setDeleteTarget(null);
   };

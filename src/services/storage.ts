@@ -83,9 +83,6 @@ export function loadUsersList(): UserProfile[] {
             (u.email === 'presidente@gmail.com' || u.email === 'presidente@tecnosystem.com'
               ? 'Presidente / Admin'
               : 'Membro'),
-          password:
-            u.password ??
-            (u.email === 'presidente@gmail.com' ? 'presidente123' : '123'),
         }));
 
         // Garante a existência dos três seed users obrigatórios (Presidente, Diretor de RH, Membro de TI)

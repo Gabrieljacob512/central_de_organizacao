@@ -52,6 +52,14 @@ export default function App() {
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [userManagementOpen, setUserManagementOpen] = useState(false);
 
+  // Força a troca de senha no primeiro acesso caso mustChangePassword esteja ativo
+  useEffect(() => {
+    if (currentUser?.mustChangePassword) {
+      setChangePasswordOpen(true);
+      toast.info('Troca obrigatória de senha', 'Por razões de segurança, defina uma nova senha no primeiro acesso.');
+    }
+  }, [currentUser?.mustChangePassword, toast]);
+
   // Trilha de Auditoria (Requisito 2 & 4)
   const { logs: auditLogs, addAuditLog, clearLogs: clearAuditLogs } = useAuditLogs();
   const [auditModalOpen, setAuditModalOpen] = useState(false);
@@ -495,13 +503,13 @@ export default function App() {
             }
             return res;
           }}
-          onDeleteUser={(userId) => {
-            const res = deleteUser(userId);
+          onDeleteUser={async (userId) => {
+            const res = await deleteUser(userId);
             if (res.success && res.user) {
               addAuditLog({
                 action: 'EXCLUSAO_COLABORADOR',
                 performedBy: `${currentUser.name} [${currentUser.role}] (${currentUser.email})`,
-                details: `Colaborador removido: ${res.user.name} (${res.user.email}).`,
+                details: `Colaborador desativado: ${res.user.name} (${res.user.email}).`,
               });
             }
             return res;
