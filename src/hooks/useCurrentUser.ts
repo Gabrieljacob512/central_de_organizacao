@@ -47,6 +47,17 @@ export function useCurrentUser() {
         if (profile) {
           setCurrentUserState(profile);
           saveCurrentUser(profile);
+          listAllUsers()
+            .then((users) => {
+              if (!mounted) return;
+              if (users.length > 0) {
+                setUsersList(users);
+                saveUsersList(users);
+              }
+            })
+            .catch((err) => {
+              console.warn('[useCurrentUser] Erro ao sincronizar colaboradores com Supabase:', err);
+            });
         } else {
           // Se não há sessão ativa no Supabase, limpa o cache local
           setCurrentUserState(null);
@@ -55,18 +66,6 @@ export function useCurrentUser() {
       })
       .catch((err) => {
         console.warn('[useCurrentUser] Não foi possível restaurar sessão do Supabase:', err);
-      });
-
-    listAllUsers()
-      .then((users) => {
-        if (!mounted) return;
-        if (users.length > 0) {
-          setUsersList(users);
-          saveUsersList(users);
-        }
-      })
-      .catch((err) => {
-        console.warn('[useCurrentUser] Erro ao sincronizar colaboradores com Supabase:', err);
       });
 
     return () => {

@@ -192,15 +192,15 @@ async function runTests() {
   });
 
   if (inactiveUser?.user) {
-    // Cria perfil inativo
-    await adminClient.from('profiles').insert({
+    // Atualiza perfil para inativo
+    await adminClient.from('profiles').upsert({
       id: inactiveUser.user.id,
       name: 'Usuário Desativado',
       email: testEmail,
-      department_id: 'd1000000-0000-0000-0000-000000000001',
+      department_id: 'd1000000-0000-0000-0000-000000000002',
       role_id: 'b1000000-0000-0000-0000-000000000004',
       is_active: false,
-    });
+    }, { onConflict: 'id' });
 
     const inactiveClient = createClient<Database>(supabaseUrl, anonKey);
     const { data: inactiveAuth } = await inactiveClient.auth.signInWithPassword({
