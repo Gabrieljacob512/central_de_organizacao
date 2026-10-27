@@ -499,7 +499,7 @@ export function UserManagementModal({
                 </p>
                 <p className="mt-1 text-[11px] text-blue-800 dark:text-blue-300">
                   {finalRole.toLowerCase().includes('presidente')
-                    ? '👑 Presidente: acesso irrestrito para visualizar todos os chamados da empresa, excluir chamados e gerenciar colaboradores.'
+                    ? '🛡️ Presidente: acesso executivo global para visualizar e gerenciar chamados e usuários da Tecno System.'
                     : finalRole.toLowerCase().includes('diretor') && (department === 'RH' || finalRole.toLowerCase().includes('rh'))
                     ? '👔 Diretor de RH: visualiza chamados de RH, exclui chamados e pode cadastrar/excluir colaboradores.'
                     : finalRole.toLowerCase().includes('diretor')

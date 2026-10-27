@@ -31,13 +31,16 @@ import { useNow } from './hooks/useUi';
 import { loadViewMode, saveViewMode } from './services/storage';
 import type { AuthorRole, Department, Status, Ticket, TicketFormData, ViewMode } from './types/ticket';
 import { formatDateTime, formatLongDate } from './utils/format';
-import { canDeleteTicket, canManageUsers, canViewAudit, filterTicketsForUser, getUserRoleBadgeInfo, isPresident } from './utils/rbac';
+import { canDeleteTicket, canManageUsers, canViewAudit, filterTicketsForUser, getUserRoleBadgeInfo, getUserSubtitle } from './utils/rbac';
 
 const VIEW_TITLES: Record<ViewMode, string> = {
   overview: 'Visão Geral das Solicitações',
   tickets: 'Central de Chamados',
   'my-tickets': 'Meus Chamados',
+  notifications: 'Notificações',
   metrics: 'Painel Executivo & Métricas',
+  finance: 'Gestão Financeira',
+  people: 'Gestão de Pessoas & RH',
   workspace: 'Espaço Privado de Organização',
   calendar: 'Calendário Corporativo & Pessoal',
   audit: 'Trilha de Auditoria & Governança',
@@ -131,7 +134,6 @@ export default function App() {
   });
 
   const canDelete = canDeleteTicket(currentUser);
-  const isPresidentUser = isPresident(currentUser);
   const roleBadge = getUserRoleBadgeInfo(currentUser);
 
   const selectedTicket = useMemo(
@@ -291,11 +293,7 @@ export default function App() {
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold shadow-2xs ${roleBadge.badgeClass}`}
             >
               <span>{roleBadge.icon}</span>
-              <span>
-                {isPresidentUser
-                  ? 'Presidente (Visão Irrestrita Global)'
-                  : `${roleBadge.label} · Setor ${currentUser.department} (Isolamento Ativo)`}
-              </span>
+              <span>{getUserSubtitle(currentUser)}</span>
             </span>
           </div>
         </div>

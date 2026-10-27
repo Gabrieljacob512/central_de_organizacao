@@ -2,7 +2,7 @@
  * Tipos de domínio do Service Desk da Tecno System.
  */
 
-export type Department = 'Financeiro' | 'RH' | 'Marketing' | 'Projetos';
+export type Department = 'Administração' | 'Financeiro' | 'RH' | 'Marketing' | 'Projetos';
 
 export type Priority = 'Baixa' | 'Média' | 'Alta' | 'Crítica';
 
@@ -11,6 +11,7 @@ export type Status = 'Aberto' | 'Em Andamento' | 'Pendente' | 'Resolvido' | 'Fec
 /** Cargos e hierarquia do sistema de chamados. */
 export type UserRole =
   | 'Presidente'
+  | 'Vice-presidente'
   | 'Diretor'
   | 'Diretor de RH'
   | 'Diretor Financeiro'
@@ -20,6 +21,30 @@ export type UserRole =
   | 'Cliente'
   | string;
 
+export interface DepartmentMembership {
+  departmentId: string;
+  departmentCode: Department;
+  departmentName: string;
+  isDirector: boolean;
+}
+
+/** Permissões granulares de Pessoas (RH) */
+export type PeoplePermission =
+  | 'people.view_all'
+  | 'people.create_member'
+  | 'people.create_leadership'
+  | 'people.create_executive'
+  | 'people.edit_members_other_depts'
+  | 'people.edit_all'
+  | 'people.deactivate'
+  | 'people.view_activity';
+
+/** Permissões granulares do Financeiro */
+export type FinancePermission =
+  | 'finance.view'
+  | 'finance.manage'
+  | 'finance.close_month';
+
 /** Perfil de colaborador / usuário para identificação, controle de acesso e auditoria. */
 export interface UserProfile {
   id: string;
@@ -28,6 +53,7 @@ export interface UserProfile {
   departmentEmail?: string;
   password?: string;
   department: Department;
+  secondaryDepartment?: Department;
   role: string;
   createdAt: string;
   isActive?: boolean;
@@ -35,6 +61,8 @@ export interface UserProfile {
   avatarUrl?: string | null;
   theme?: 'light' | 'dark' | 'system';
   permissions?: string[];
+  isExecutive?: boolean;
+  departmentMemberships?: DepartmentMembership[];
 }
 
 /** Tipos de ações registradas na trilha de auditoria global. */
@@ -154,7 +182,10 @@ export type ViewMode =
   | 'overview'
   | 'tickets'
   | 'my-tickets'
+  | 'notifications'
   | 'metrics'
+  | 'finance'
+  | 'people'
   | 'workspace'
   | 'calendar'
   | 'audit'
@@ -177,4 +208,64 @@ export interface TicketFilters {
 export interface ActionResult {
   ok: boolean;
   message: string;
+}
+
+export interface FinanceMonth {
+  id: string;
+  competence: string; // 'YYYY-MM'
+  isClosed: boolean;
+  closedAt?: string | null;
+  closedBy?: string | null;
+  reopenedAt?: string | null;
+  reopenedBy?: string | null;
+  totalRevenueCents: number;
+  totalExpenseCents: number;
+  balanceCents: number;
+}
+
+export interface FinanceEntry {
+  id: string;
+  monthId: string;
+  type: 'gain' | 'expense';
+  category: string;
+  amountCents: number;
+  description: string;
+  projectId?: string | null;
+  projectName?: string | null;
+  createdAt: string;
+  createdBy?: string | null;
+}
+
+export interface FinanceMonthProject {
+  id: string;
+  monthId: string;
+  projectId?: string | null;
+  projectName: string;
+  revenueCents: number;
+  notes?: string | null;
+  createdAt?: string;
+}
+
+export interface FinanceAttachment {
+  id: string;
+  entityType: 'entry' | 'project';
+  entityId: string;
+  fileName: string;
+  sizeBytes: number;
+  mimeType: string;
+  storagePath: string;
+  signedUrl?: string;
+  createdAt?: string;
+}
+
+export interface ResponderStat {
+  profile_id: string;
+  name: string;
+  email: string;
+  department_name: string;
+  role_name: string;
+  assigned_count: number;
+  comments_count: number;
+  resolved_count: number;
+  last_activity_at: string | null;
 }

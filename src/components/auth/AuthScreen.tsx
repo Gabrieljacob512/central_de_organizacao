@@ -289,7 +289,7 @@ export function AuthScreen({
                   <p className="text-center text-[11px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500 mb-2.5">
                     Acesso rápido para testes (Seed Dev)
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {/* 1. Presidente */}
                     <button
                       type="button"
@@ -297,30 +297,41 @@ export function AuthScreen({
                       onClick={() => handleQuickSeed('presidente@gmail.com', 'Presidente@2026')}
                       className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 p-2 text-center transition hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 cursor-pointer"
                     >
-                      <span className="text-xs font-bold text-amber-900 dark:text-amber-200">👑 Presidente</span>
-                      <span className="text-[10px] text-amber-700 dark:text-amber-400">Diretoria (Vê tudo)</span>
+                      <span className="text-xs font-bold text-amber-900 dark:text-amber-200">Presidente</span>
+                      <span className="text-[10px] text-amber-700 dark:text-amber-400">Administração</span>
                     </button>
 
-                    {/* 2. Diretor de RH */}
+                    {/* 2. Vice-presidente */}
+                    <button
+                      type="button"
+                      id="quick-login-vp"
+                      onClick={() => handleQuickSeed('vicepresidente@tecnosystem.com', 'Tecno@2026!')}
+                      className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50/80 p-2 text-center transition hover:bg-indigo-100 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 cursor-pointer"
+                    >
+                      <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200">Vice-pres.</span>
+                      <span className="text-[10px] text-indigo-700 dark:text-indigo-400">Adm & Projetos</span>
+                    </button>
+
+                    {/* 3. Diretor de RH */}
                     <button
                       type="button"
                       id="quick-login-rh"
                       onClick={() => handleQuickSeed('rh@tecnosystem.com', 'Tecno@2026!')}
                       className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-purple-200 bg-purple-50/80 p-2 text-center transition hover:bg-purple-100 dark:border-purple-900/60 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 cursor-pointer"
                     >
-                      <span className="text-xs font-bold text-purple-900 dark:text-purple-200">👔 Diretor RH</span>
-                      <span className="text-[10px] text-purple-700 dark:text-purple-400">RH (Cadastra usrs)</span>
+                      <span className="text-xs font-bold text-purple-900 dark:text-purple-200">Diretor RH</span>
+                      <span className="text-[10px] text-purple-700 dark:text-purple-400">RH & Pessoas</span>
                     </button>
 
-                    {/* 3. Membro de TI */}
+                    {/* 4. Membro de Projetos */}
                     <button
                       type="button"
-                      id="quick-login-ti"
-                      onClick={() => handleQuickSeed('ti@tecnosystem.com', 'Tecno@2026!')}
+                      id="quick-login-projetos"
+                      onClick={() => handleQuickSeed('projetos@tecnosystem.com', 'Tecno@2026!')}
                       className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-blue-200 bg-blue-50/80 p-2 text-center transition hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 cursor-pointer"
                     >
-                      <span className="text-xs font-bold text-blue-900 dark:text-blue-200">💻 Membro TI</span>
-                      <span className="text-[10px] text-blue-700 dark:text-blue-400">TI (Setor isolado)</span>
+                      <span className="text-xs font-bold text-blue-900 dark:text-blue-200">Projetos</span>
+                      <span className="text-[10px] text-blue-700 dark:text-blue-400">Membro</span>
                     </button>
                   </div>
                 </div>
