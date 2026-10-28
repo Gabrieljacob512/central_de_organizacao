@@ -1,4 +1,4 @@
-import { CATEGORIES_BY_DEPARTMENT, DEPARTMENTS, PRIORITIES } from '../constants/config';
+import { ALL_DEPARTMENTS, CATEGORIES_BY_DEPARTMENT, PRIORITIES } from '../constants/config';
 import type { TicketFormData, TicketFormErrors } from '../types/ticket';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -28,16 +28,16 @@ export function validateTicketForm(data: TicketFormData): TicketFormErrors {
   if (!email) errors.email = 'Informe o e-mail do solicitante.';
   else if (!EMAIL_PATTERN.test(email)) errors.email = 'Informe um e-mail válido (ex.: nome@tecnosystem.com.br).';
 
-  if (!DEPARTMENTS.includes(data.department)) errors.department = 'Selecione o departamento de origem.';
+  if (!ALL_DEPARTMENTS.includes(data.department)) errors.department = 'Selecione o departamento de origem.';
 
-  if (!DEPARTMENTS.includes(data.assignedDepartment)) {
+  if (!ALL_DEPARTMENTS.includes(data.assignedDepartment)) {
     errors.assignedDepartment = 'Selecione o departamento responsável pelo atendimento.';
   }
 
   const targetDept = data.assignedDepartment || data.department;
   if (!data.category) {
     errors.category = 'Selecione uma categoria.';
-  } else if (DEPARTMENTS.includes(targetDept) && !CATEGORIES_BY_DEPARTMENT[targetDept]?.includes(data.category)) {
+  } else if (ALL_DEPARTMENTS.includes(targetDept) && !CATEGORIES_BY_DEPARTMENT[targetDept]?.includes(data.category)) {
     errors.category = 'Categoria inválida para o departamento responsável selecionado.';
   }
 

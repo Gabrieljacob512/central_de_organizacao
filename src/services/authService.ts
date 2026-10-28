@@ -22,6 +22,7 @@ export const ChangePasswordSchema = z.object({
 export interface AuthProfileResult {
   success: boolean;
   error?: string;
+  message?: string;
   user?: UserProfile;
   mustChangePassword?: boolean;
 }
@@ -76,7 +77,8 @@ export async function signIn(email: string, pass: string): Promise<AuthProfileRe
 
   const validation = LoginSchema.safeParse({ email, password: pass });
   if (!validation.success) {
-    return { success: false, error: validation.error.issues[0]?.message || 'Dados inválidos.' };
+    const msg = validation.error.issues[0]?.message || 'Dados inválidos.';
+    return { success: false, error: msg, message: msg };
   }
 
   const cleanEmail = validation.data.email.trim().toLowerCase();
@@ -86,11 +88,13 @@ export async function signIn(email: string, pass: string): Promise<AuthProfileRe
   const found = users.find((u) => u.email.trim().toLowerCase() === cleanEmail);
 
   if (!found || found.password !== cleanPass) {
-    return { success: false, error: 'E-mail ou senha incorretos.' };
+    const msg = !found ? 'Usuário não encontrado no sistema.' : 'E-mail ou senha incorretos.';
+    return { success: false, error: msg, message: msg };
   }
 
   if (!found.isActive) {
-    return { success: false, error: 'Esta conta de usuário foi desativada. Entre em contato com a administração.' };
+    const msg = 'Esta conta de usuário foi desativada. Entre em contato com a administração.';
+    return { success: false, error: msg, message: msg };
   }
 
   // Grava a sessão simulada: { userId, startedAt }
@@ -103,6 +107,7 @@ export async function signIn(email: string, pass: string): Promise<AuthProfileRe
   const userProfile = mapStoredUserToUserProfile(found);
   return {
     success: true,
+    message: 'Login realizado com sucesso.',
     user: userProfile,
     mustChangePassword: found.mustChangePassword,
   };

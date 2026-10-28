@@ -4,6 +4,7 @@ import {
   Bell,
   Building2,
   CheckCircle2,
+  Copy,
   Info,
   Search,
   Shield,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ALL_DEPARTMENTS, OPERATIONAL_DEPARTMENTS } from '../../constants/config';
+import { subscribeStorage } from '../../data/storage';
 import { useToast } from '../../hooks/useToast';
 import {
   createPerson,
@@ -25,8 +27,6 @@ import { formatDateTime } from '../../utils/format';
 import {
   getUserRoleBadgeInfo,
   getUserSubtitle,
-  isExecutive,
-  isHrDirector,
 } from '../../utils/rbac';
 import { Avatar } from '../ui/Avatar';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -60,6 +60,13 @@ export function PeopleView({ currentUser }: PeopleViewProps) {
   // Estado de Confirmação de Inativação
   const [toggleTarget, setToggleTarget] = useState<UserProfile | null>(null);
 
+  // Estado da Senha Temporária Gerada (Modal pós-cadastro)
+  const [createdPasswordInfo, setCreatedPasswordInfo] = useState<{
+    name: string;
+    email: string;
+    password: string;
+  } | null>(null);
+
   // Estado da Aba de Atividade
   const [periodDays, setPeriodDays] = useState<number>(30);
   const [activityDeptFilter, setActivityDeptFilter] = useState<string>('all');
@@ -67,8 +74,15 @@ export function PeopleView({ currentUser }: PeopleViewProps) {
   const [loadingStats, setLoadingStats] = useState(false);
   const [alertingUser, setAlertingUser] = useState<string | null>(null);
 
-  const isExecutiveUser = isExecutive(currentUser);
-  const isHrDirectorUser = isHrDirector(currentUser);
+  // Validação de Permissões Estritas:
+  // - Presidente: pode cadastrar qualquer cargo em qualquer departamento
+  // - Vice-presidente: pode cadastrar Diretor ou Membro apenas no departamento que dirige
+  // - Diretor de RH: pode cadastrar Membro apenas no RH
+  // - Outros: botão desabilitado com aviso explicativo
+  const isPresident = currentUser?.role === 'Presidente';
+  const isVicePresident = currentUser?.role === 'Vice-presidente';
+  const isHrDirectorUser = currentUser?.role === 'Diretor' && currentUser?.department === 'RH';
+  const canAddCollaborator = isPresident || isVicePresident || isHrDirectorUser;
 
   // Carregar lista de colaboradores
   const loadPeople = async () => {
@@ -102,6 +116,17 @@ export function PeopleView({ currentUser }: PeopleViewProps) {
     }
   }, [activeTab, periodDays]);
 
+  // Atualização em tempo real via storage
+  useEffect(() => {
+    const unsub = subscribeStorage(() => {
+      loadPeople();
+      if (activeTab === 'activity') {
+        loadStats(periodDays);
+      }
+    });
+    return unsub;
+  }, [activeTab, periodDays]);
+
   // Lista filtrada de colaboradores
   const filteredPeople = useMemo(() => {
     return people.filter((p) => {
@@ -123,24 +148,43 @@ export function PeopleView({ currentUser }: PeopleViewProps) {
     });
   }, [people, deptFilter, statusFilter, searchTerm]);
 
-  // Permissões de criação de cargos
+  // Permissões de criação de cargos conforme quem está logado
   const availableRoles = useMemo(() => {
-    if (isExecutiveUser) {
+    if (isPresident) {
       return ['Membro', 'Diretor', 'Vice-presidente', 'Presidente'];
+    }
+    if (isVicePresident) {
+      return ['Membro', 'Diretor'];
     }
     if (isHrDirectorUser) {
-      return ['Membro', 'Diretor', 'Vice-presidente', 'Presidente'];
+      return ['Membro'];
     }
-    // Membro comum do RH só pode cadastrar Membro
-    return ['Membro'];
-  }, [isExecutiveUser, isHrDirectorUser]);
+    return [];
+  }, [isPresident, isVicePresident, isHrDirectorUser]);
+
+  // Departamentos disponíveis para cadastro
+  const availableDepartments: Department[] = useMemo(() => {
+    if (isPresident) {
+      return ALL_DEPARTMENTS;
+    }
+    if (isVicePresident) {
+      const dept = (currentUser?.secondaryDepartment as Department) || 'Projetos';
+      return [dept];
+    }
+    if (isHrDirectorUser) {
+      return ['RH'];
+    }
+    return [];
+  }, [isPresident, isVicePresident, isHrDirectorUser, currentUser?.secondaryDepartment]);
 
   // Reset do modal ao abrir
   const handleOpenCreateModal = () => {
+    if (!canAddCollaborator) return;
     setNewName('');
     setNewEmail('');
-    setNewDepartment(isExecutiveUser || isHrDirectorUser ? 'Projetos' : 'Projetos');
-    setNewRole(availableRoles[0]);
+    const defaultDept = availableDepartments[0] || 'Projetos';
+    setNewDepartment(defaultDept);
+    setNewRole(availableRoles[0] || 'Membro');
     setNewSecondaryDepartment('Projetos');
     setCreateModalOpen(true);
   };
@@ -154,16 +198,26 @@ export function PeopleView({ currentUser }: PeopleViewProps) {
     }
 
     setCreating(true);
+    const targetDept = newRole === 'Presidente' || newRole === 'Vice-presidente' ? 'Administração' : newDepartment;
     const res = await createPerson({
       name: newName.trim(),
-      email: newEmail.trim(),
-      department: newRole === 'Presidente' || newRole === 'Vice-presidente' ? 'Administração' : newDepartment,
+      email: newEmail.trim().toLowerCase(),
+      department: targetDept,
       secondaryDepartment: newRole === 'Vice-presidente' ? newSecondaryDepartment : undefined,
       role: newRole,
     });
     setCreating(false);
 
-    if (res.success) {
+    if (res.success && res.temporaryPassword) {
+      toast.success('Colaborador cadastrado', res.message);
+      setCreatedPasswordInfo({
+        name: newName.trim(),
+        email: newEmail.trim().toLowerCase(),
+        password: res.temporaryPassword,
+      });
+      setCreateModalOpen(false);
+      loadPeople();
+    } else if (res.success) {
       toast.success('Sucesso', res.message);
       setCreateModalOpen(false);
       loadPeople();
@@ -262,8 +316,18 @@ export function PeopleView({ currentUser }: PeopleViewProps) {
           <button
             id="btn-add-collaborator"
             type="button"
+            disabled={!canAddCollaborator}
+            title={
+              !canAddCollaborator
+                ? 'Apenas Presidente, Vice-presidente ou Diretor de RH podem cadastrar colaboradores.'
+                : undefined
+            }
             onClick={handleOpenCreateModal}
-            className="btn-primary min-h-[40px] px-3.5 py-2 text-xs font-bold shadow-md shadow-blue-600/20"
+            className={`min-h-[40px] px-3.5 py-2 text-xs font-bold rounded-xl flex items-center gap-2 transition ${
+              !canAddCollaborator
+                ? 'opacity-60 cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
+                : 'btn-primary shadow-md shadow-blue-600/20 cursor-pointer'
+            }`}
           >
             <UserPlus className="h-4 w-4" />
             <span>Novo Colaborador</span>
@@ -671,13 +735,21 @@ export function PeopleView({ currentUser }: PeopleViewProps) {
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
               <span>Cargo na Empresa</span>
-              {!isExecutiveUser && !isHrDirectorUser && (
+              {!isPresident && (
                 <span
-                  title="Membros do RH só possuem permissão para criar outros membros"
+                  title={
+                    isVicePresident
+                      ? 'Vice-presidente só pode cadastrar no departamento que dirige'
+                      : 'Diretor de RH só pode cadastrar Membro no RH'
+                  }
                   className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1"
                 >
                   <Info className="h-3 w-3" />
-                  <span>Apenas Membro permitido</span>
+                  <span>
+                    {isVicePresident
+                      ? 'Cargos restritos ao seu depto'
+                      : 'Apenas Membro permitido'}
+                  </span>
                 </span>
               )}
             </label>
@@ -698,14 +770,17 @@ export function PeopleView({ currentUser }: PeopleViewProps) {
           {newRole !== 'Presidente' && newRole !== 'Vice-presidente' && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Departamento Operacional
+                Departamento {availableDepartments.length === 1 && '(Fixado)'}
               </label>
               <select
                 value={newDepartment}
+                disabled={availableDepartments.length <= 1}
                 onChange={(e) => setNewDepartment(e.target.value as Department)}
-                className="w-full min-h-[40px] appearance-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs sm:text-sm font-semibold outline-none focus:border-blue-500 dark:border-slate-800 dark:bg-slate-900 cursor-pointer"
+                className={`w-full min-h-[40px] appearance-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs sm:text-sm font-semibold outline-none focus:border-blue-500 dark:border-slate-800 dark:bg-slate-900 ${
+                  availableDepartments.length <= 1 ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+                }`}
               >
-                {OPERATIONAL_DEPARTMENTS.map((d) => (
+                {availableDepartments.map((d) => (
                   <option key={d} value={d}>
                     {d}
                   </option>
@@ -747,6 +822,7 @@ export function PeopleView({ currentUser }: PeopleViewProps) {
               Cancelar
             </button>
             <button
+              id="btn-submit-new-collaborator"
               type="submit"
               disabled={creating}
               className="btn-primary"
@@ -755,6 +831,64 @@ export function PeopleView({ currentUser }: PeopleViewProps) {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal: Exibição da Senha Temporária com Cópia */}
+      <Modal
+        open={Boolean(createdPasswordInfo)}
+        onClose={() => setCreatedPasswordInfo(null)}
+        title="Credenciais de Acesso Criadas"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            O colaborador <strong>{createdPasswordInfo?.name}</strong> (<code>{createdPasswordInfo?.email}</code>) foi cadastrado com sucesso.
+          </p>
+
+          <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-4 dark:border-amber-900/60 dark:bg-amber-950/40 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200">
+              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <span>Senha Temporária Gerada (10 Caracteres)</span>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg bg-white p-3 border border-amber-200 dark:bg-slate-900 dark:border-slate-800 shadow-2xs">
+              <code
+                id="display-temp-password"
+                className="text-base font-mono font-bold tracking-wider text-slate-900 dark:text-white select-all"
+              >
+                {createdPasswordInfo?.password}
+              </code>
+              <button
+                id="btn-copy-temp-password"
+                type="button"
+                onClick={() => {
+                  if (createdPasswordInfo?.password) {
+                    navigator.clipboard.writeText(createdPasswordInfo.password);
+                    toast.success('Senha copiada!', 'A senha temporária foi copiada para a área de transferência.');
+                  }
+                }}
+                className="btn-secondary text-xs flex items-center gap-1.5 py-1.5 px-3 cursor-pointer"
+              >
+                <Copy className="h-4 w-4 text-blue-600" />
+                <span>Copiar Senha</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-amber-900 dark:text-amber-300 font-semibold leading-relaxed">
+              ⚠️ <strong>Esta senha não será exibida novamente.</strong> Copie e entregue ao colaborador. O sistema exigirá redefinição no primeiro acesso (<code>must_change_password: true</code>).
+            </p>
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              id="btn-confirm-copied-password"
+              type="button"
+              onClick={() => setCreatedPasswordInfo(null)}
+              className="btn-primary min-h-[40px] px-4 cursor-pointer"
+            >
+              Concluído
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Confirmação de Inativação / Reativação */}

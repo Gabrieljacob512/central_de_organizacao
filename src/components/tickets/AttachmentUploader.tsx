@@ -73,15 +73,29 @@ export function AttachmentUploader({ files, onChangeFiles, onError }: Attachment
     onChangeFiles(files.map((f) => (f.id === id ? { ...f, description: desc } : f)));
   };
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (e.clipboardData?.files && e.clipboardData.files.length > 0) {
+      e.preventDefault();
+      processFileList(e.clipboardData.files);
+    }
+  };
+
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2.5" onPaste={handlePaste}>
       {/* Zona de Drop e Seleção */}
       <div
+        tabIndex={0}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-3 text-center transition ${
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-3 text-center transition focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
           isDragging
             ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/30'
             : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/70 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:bg-slate-800/40'

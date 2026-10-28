@@ -12,6 +12,8 @@ import {
 } from '../data/storage';
 import { seedDemoData } from '../data/seed';
 import { deleteFiles } from '../data/indexedDb';
+import { filterTicketsForUser } from '../auth/permissions';
+import { getCurrentUser } from './authService';
 import type { AuthorRole, Priority, Status, Ticket, TicketFormData, UserProfile } from '../types/ticket';
 import { computeSlaDueAt } from '../utils/sla';
 
@@ -20,7 +22,7 @@ export const TicketFormSchema = z.object({
   requester: z.string().min(1, 'O solicitante é obrigatório.'),
   email: z.string().email('E-mail corporativo inválido.'),
   department: z.enum(['Administração', 'Financeiro', 'RH', 'Marketing', 'Projetos']),
-  assignedDepartment: z.enum(['Financeiro', 'RH', 'Marketing', 'Projetos']),
+  assignedDepartment: z.enum(['Administração', 'Financeiro', 'RH', 'Marketing', 'Projetos']),
   category: z.string().min(1, 'A categoria é obrigatória.'),
   priority: z.enum(['Baixa', 'Média', 'Alta', 'Crítica']),
   description: z.string().min(10, 'A descrição deve ter ao menos 10 caracteres.'),
@@ -55,11 +57,16 @@ export function mapStoredTicketToTicket(t: StoredTicket): Ticket {
   };
 }
 
-/** Carrega todos os chamados da coleção LocalStorage */
-export async function fetchTickets(): Promise<Ticket[]> {
+/** Carrega os chamados da coleção LocalStorage respeitando regras de visibilidade */
+export async function fetchTickets(user?: UserProfile | null): Promise<Ticket[]> {
   seedDemoData();
   const tickets = readCollection('tickets', z.array(StoredTicketSchema), []);
-  return tickets.map(mapStoredTicketToTicket);
+  const mapped = tickets.map(mapStoredTicketToTicket);
+  const targetUser = user !== undefined ? user : getCurrentUser();
+  if (targetUser) {
+    return filterTicketsForUser(mapped, targetUser);
+  }
+  return mapped;
 }
 
 /** Criação de chamado com validação Zod, código legível (#0001) e auditoria */

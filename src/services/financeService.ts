@@ -392,9 +392,9 @@ export async function createMonthProject(input: {
  * Fechamento ou reabertura do mês contábil com auditoria.
  */
 export async function toggleMonthClosure(
-  monthId: string,
+  monthIdOrCompetence: string,
   isClosed: boolean,
-  competence: string
+  competence?: string
 ): Promise<{ success: boolean; message: string }> {
   try {
     const currentUser = getCurrentUser();
@@ -404,7 +404,11 @@ export async function toggleMonthClosure(
       action: () => {
         const months = readCollection('financeMonths', z.array(StoredFinanceMonthSchema), []);
         const updated = months.map((m) => {
-          if (m.id === monthId || m.competence === competence) {
+          if (
+            m.id === monthIdOrCompetence ||
+            m.competence === monthIdOrCompetence ||
+            (competence && (m.id === competence || m.competence === competence))
+          ) {
             return {
               ...m,
               isClosed,

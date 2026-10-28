@@ -1,7 +1,7 @@
 import { Building2, Lock, UserCheck } from 'lucide-react';
 
 import { useEffect, useState } from 'react';
-import { AGENTS_BY_DEPARTMENT, CATEGORIES_BY_DEPARTMENT, DEPARTMENTS, PRIORITIES, SLA_HOURS } from '../../constants/config';
+import { AGENTS_BY_DEPARTMENT, ALL_DEPARTMENTS, CATEGORIES_BY_DEPARTMENT, PRIORITIES, SLA_HOURS } from '../../constants/config';
 import { PRIORITY_STYLES } from '../../constants/styles';
 import { fetchProjects, type Project } from '../../services/differentiatorsService';
 import type { Department, Priority, TicketFormData, TicketFormErrors } from '../../types/ticket';
@@ -124,7 +124,7 @@ export function TicketFields({ idPrefix, value, errors, onChange, isCreateMode =
               className={`${inputClass(Boolean(errors.department))} cursor-pointer`}
               {...aria('department')}
             >
-              {DEPARTMENTS.map((department) => (
+              {ALL_DEPARTMENTS.map((department) => (
                 <option key={department} value={department}>
                   {department}
                 </option>
@@ -132,6 +132,31 @@ export function TicketFields({ idPrefix, value, errors, onChange, isCreateMode =
             </select>
           </FormField>
         </>
+      )}
+
+      {/* Em modo de criação, permite ao solicitante conferir ou ajustar o Departamento de Origem */}
+      {isCreateMode && (
+        <FormField
+          label="Departamento de Origem do Solicitante"
+          htmlFor={fieldId('department')}
+          required
+          error={errors.department}
+          hint="Departamento do solicitante (ex.: Administração para Diretoria Executiva)"
+        >
+          <select
+            id={fieldId('department')}
+            value={value.department}
+            onChange={(event) => onChange({ department: event.target.value as Department })}
+            className={`${inputClass(Boolean(errors.department))} cursor-pointer font-medium`}
+            {...aria('department')}
+          >
+            {ALL_DEPARTMENTS.map((department) => (
+              <option key={department} value={department}>
+                {department}
+              </option>
+            ))}
+          </select>
+        </FormField>
       )}
 
       {/* Departamento Responsável */}
@@ -156,10 +181,10 @@ export function TicketFields({ idPrefix, value, errors, onChange, isCreateMode =
                 category: nextCategories[0] ?? '',
               });
             }}
-            className={`${inputClass(Boolean(errors.assignedDepartment))} pl-9 cursor-pointer font-medium text-slate-900`}
+            className={`${inputClass(Boolean(errors.assignedDepartment))} pl-9 cursor-pointer font-medium text-slate-900 dark:text-white`}
             {...aria('assignedDepartment')}
           >
-            {DEPARTMENTS.map((dept) => (
+            {ALL_DEPARTMENTS.map((dept) => (
               <option key={dept} value={dept}>
                 Equipe de {dept}
               </option>

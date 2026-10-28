@@ -15,6 +15,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { subscribeStorage } from '../../data/storage';
 import { useToast } from '../../hooks/useToast';
 import {
   createFinanceEntry,
@@ -137,6 +138,16 @@ export function FinanceView({ currentUser }: FinanceViewProps) {
     if (selectedCompetence) {
       loadActiveMonth(selectedCompetence);
     }
+  }, [selectedCompetence]);
+
+  useEffect(() => {
+    const unsub = subscribeStorage(() => {
+      loadMonths();
+      if (selectedCompetence) {
+        loadActiveMonth(selectedCompetence);
+      }
+    });
+    return unsub;
   }, [selectedCompetence]);
 
   // Filtro de lançamentos
@@ -458,31 +469,57 @@ export function FinanceView({ currentUser }: FinanceViewProps) {
         </div>
 
         {/* Botão de Ação Direta na Aba */}
-        {!isMonthClosed && canManage && (
-          <div className="flex items-center gap-2">
-            {tab === 'entries' ? (
-              <button
-                id="btn-new-finance-entry"
-                type="button"
-                onClick={() => setNewEntryOpen(true)}
-                className="btn-primary min-h-[38px] px-3 py-1.5 text-xs font-bold shadow-md shadow-blue-600/20"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Novo Lançamento</span>
-              </button>
-            ) : (
-              <button
-                id="btn-new-month-project"
-                type="button"
-                onClick={() => setNewProjectOpen(true)}
-                className="btn-primary min-h-[38px] px-3 py-1.5 text-xs font-bold shadow-md shadow-blue-600/20"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Faturar Projeto</span>
-              </button>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {tab === 'entries' ? (
+            <button
+              id="btn-new-finance-entry"
+              type="button"
+              disabled={isMonthClosed || !canManage}
+              title={
+                isMonthClosed
+                  ? 'Competência contábil fechada para novos lançamentos.'
+                  : !canManage
+                  ? 'Sem permissão de gerenciamento financeiro.'
+                  : undefined
+              }
+              onClick={() => {
+                if (!isMonthClosed && canManage) setNewEntryOpen(true);
+              }}
+              className={`min-h-[38px] px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-2 transition ${
+                isMonthClosed || !canManage
+                  ? 'opacity-60 cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
+                  : 'btn-primary shadow-md shadow-blue-600/20 cursor-pointer'
+              }`}
+            >
+              <Plus className="h-4 w-4" />
+              <span>Novo Lançamento</span>
+            </button>
+          ) : (
+            <button
+              id="btn-new-month-project"
+              type="button"
+              disabled={isMonthClosed || !canManage}
+              title={
+                isMonthClosed
+                  ? 'Competência contábil fechada para novos lançamentos.'
+                  : !canManage
+                  ? 'Sem permissão de gerenciamento financeiro.'
+                  : undefined
+              }
+              onClick={() => {
+                if (!isMonthClosed && canManage) setNewProjectOpen(true);
+              }}
+              className={`min-h-[38px] px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-2 transition ${
+                isMonthClosed || !canManage
+                  ? 'opacity-60 cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
+                  : 'btn-primary shadow-md shadow-blue-600/20 cursor-pointer'
+              }`}
+            >
+              <Plus className="h-4 w-4" />
+              <span>Faturar Projeto</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ==================================================================== */}
@@ -656,7 +693,21 @@ export function FinanceView({ currentUser }: FinanceViewProps) {
                 </p>
               </div>
 
-              {!isMonthClosed && canManage && (
+              {isMonthClosed || !canManage ? (
+                <button
+                  type="button"
+                  disabled
+                  title={
+                    isMonthClosed
+                      ? 'Competência contábil fechada para upload de comprovantes.'
+                      : 'Sem permissão de gerenciamento financeiro.'
+                  }
+                  className="btn-secondary opacity-60 cursor-not-allowed inline-flex items-center gap-2 text-xs font-bold py-1.5 px-3 min-h-[38px]"
+                >
+                  <UploadCloud className="h-4 w-4" />
+                  <span>Anexar Comprovante</span>
+                </button>
+              ) : (
                 <label className="btn-secondary inline-flex items-center gap-2 cursor-pointer text-xs font-bold py-1.5 px-3 min-h-[38px]">
                   <UploadCloud className="h-4 w-4 text-blue-600" />
                   <span>{uploading ? 'Enviando...' : 'Anexar Comprovante'}</span>

@@ -93,9 +93,9 @@ export const OFFICIAL_MEMBERSHIPS: StoredMembership[] = [
   { userId: 'user-mem-rh-004', departmentId: 'dept-rh', departmentCode: 'RH', isDirector: false },
 ];
 
-export function seedDemoData(): void {
+export function seedDemoData(force: boolean = false): void {
   const existingUsers = readCollection('users', z.array(StoredUserSchema), []);
-  if (existingUsers.length > 0) {
+  if (existingUsers.length > 0 && !force) {
     return; // Já existem dados populados
   }
 

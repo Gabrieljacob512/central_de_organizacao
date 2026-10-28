@@ -181,7 +181,7 @@ export interface TicketFormData {
   category: string;
   priority: Priority;
   description: string;
-  assignee: string;
+  assignee?: string;
   assigneeId?: string;
   projectId?: string;
   initialAttachments?: PendingAttachmentFile[];

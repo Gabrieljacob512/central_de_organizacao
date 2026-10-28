@@ -88,7 +88,7 @@ export const StoredTicketSchema = z.object({
   title: z.string().min(3),
   description: z.string().min(10),
   department: z.enum(['Administração', 'Financeiro', 'RH', 'Marketing', 'Projetos']),
-  assignedDepartment: z.enum(['Financeiro', 'RH', 'Marketing', 'Projetos']),
+  assignedDepartment: z.enum(['Administração', 'Financeiro', 'RH', 'Marketing', 'Projetos']),
   category: z.string(),
   priority: z.enum(['Baixa', 'Média', 'Alta', 'Crítica']),
   status: z.enum(['Aberto', 'Em Andamento', 'Pendente', 'Resolvido', 'Fechado']),
@@ -272,6 +272,25 @@ export function writeCollection<T>(key: string, data: T): void {
   }
 }
 
+export function clearStorage(): void {
+  try {
+    if (!isLocalStorageAvailable()) return;
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith(STORAGE_PREFIX)) {
+        keysToRemove.push(k);
+      }
+    }
+    for (const k of keysToRemove) {
+      window.localStorage.removeItem(k);
+    }
+    notifyStorageUpdate('*');
+  } catch (err) {
+    console.warn('[Storage] Erro ao limpar armazenamento local:', err);
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* 4. Event Bus Reativo e Sincronização entre Abas                            */
 /* -------------------------------------------------------------------------- */
@@ -279,8 +298,10 @@ export function writeCollection<T>(key: string, data: T): void {
 const STORAGE_EVENT_NAME = 'tecno:storage-update';
 
 export function notifyStorageUpdate(key?: string) {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(STORAGE_EVENT_NAME, { detail: { key } }));
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    try {
+      window.dispatchEvent(new CustomEvent(STORAGE_EVENT_NAME, { detail: { key } }));
+    } catch {}
   }
 }
 

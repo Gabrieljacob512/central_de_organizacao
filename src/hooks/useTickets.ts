@@ -66,7 +66,7 @@ function normalizeForm(data: TicketFormData): EditableFields {
     category: data.category,
     priority: data.priority,
     description: data.description.trim(),
-    assignee: data.assignee.trim() || null,
+    assignee: data.assignee?.trim() || null,
   };
 }
 

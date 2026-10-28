@@ -198,6 +198,7 @@ function TicketFormContent({
     setUploadProgress(progress);
 
     let failedCount = 0;
+    const failedNames: string[] = [];
 
     for (const item of filesToUpload) {
       const res = await uploadAttachment({
@@ -210,12 +211,13 @@ function TicketFormContent({
         setUploadProgress((prev) => ({ ...prev, [item.id]: 'success' }));
       } else {
         failedCount++;
+        failedNames.push(item.file.name);
         setUploadProgress((prev) => ({ ...prev, [item.id]: 'error' }));
         console.error(`[uploadAttachment] Falha no upload de ${item.file.name}:`, res.error);
       }
     }
 
-    return failedCount;
+    return { failedCount, failedNames };
   };
 
   // Submissão do Formulário
@@ -268,16 +270,16 @@ function TicketFormContent({
       }
 
       // 3. Envia os arquivos já vinculados ao ticketId
-      const failed = await uploadPendingAttachments(ticketId, pendingFiles);
+      const { failedCount, failedNames } = await uploadPendingAttachments(ticketId, pendingFiles);
 
-      if (failed === 0) {
+      if (failedCount === 0) {
         toast.success(`Chamado ${ticketId} concluído`, `${pendingFiles.length} anexo(s) enviado(s) com sucesso.`);
         setIsSubmitting(false);
         onClose();
       } else {
         toast.warning(
           'Upload parcial de anexos',
-          `O chamado ${ticketId} foi criado, mas ${failed} arquivo(s) falharam no envio. Você pode tentar novamente.`
+          `O chamado ${ticketId} foi criado, mas os arquivos falharam: ${failedNames.join(', ')}. Você pode tentar novamente.`
         );
         setIsSubmitting(false);
       }
@@ -294,14 +296,14 @@ function TicketFormContent({
     if (failedFiles.length === 0) return;
 
     setIsSubmitting(true);
-    const failed = await uploadPendingAttachments(createdTicketId, failedFiles);
+    const { failedCount, failedNames } = await uploadPendingAttachments(createdTicketId, failedFiles);
     setIsSubmitting(false);
 
-    if (failed === 0) {
+    if (failedCount === 0) {
       toast.success('Anexos reenviados', 'Todos os arquivos foram anexados ao chamado com sucesso.');
       onClose();
     } else {
-      toast.error('Falha persistente', `${failed} arquivo(s) ainda não puderam ser enviados.`);
+      toast.error('Falha persistente', `Os seguintes arquivos ainda falharam: ${failedNames.join(', ')}.`);
     }
   };
 
