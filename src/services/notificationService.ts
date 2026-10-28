@@ -127,8 +127,9 @@ export async function updateNotificationPreferences(
  * Assina canal em tempo real para receber notificações instantâneas
  */
 export function subscribeToUserNotifications(userId: string, onUpdate: () => void) {
+  const channelName = `notifications-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const channel = supabase
-    .channel(`notifications-${userId}`)
+    .channel(channelName)
     .on(
       'postgres_changes',
       {

@@ -24,12 +24,17 @@ export function useNotifications(userId?: string | null) {
     if (!userId) return;
     reload();
 
-    const unsub = subscribeToUserNotifications(userId, () => {
-      reload();
-    });
+    let unsub: (() => void) | undefined;
+    try {
+      unsub = subscribeToUserNotifications(userId, () => {
+        reload();
+      });
+    } catch (err) {
+      console.warn('[useNotifications] Erro ao assinar canal realtime:', err);
+    }
 
     return () => {
-      unsub();
+      if (unsub) unsub();
     };
   }, [userId]);
 

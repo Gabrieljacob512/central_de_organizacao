@@ -248,8 +248,9 @@ export async function deleteTicketComment(commentId: string): Promise<{ success:
  * Assina canal em tempo real para ouvir novos comentários e atualizações no chamado
  */
 export function subscribeToComments(ticketId: string, onChange: () => void) {
+  const channelName = `comments-${ticketId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const channel = supabase
-    .channel(`comments-${ticketId}`)
+    .channel(channelName)
     .on(
       'postgres_changes',
       {
