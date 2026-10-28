@@ -252,7 +252,6 @@ export default function App() {
     return (
       <AuthScreen
         onLogin={login}
-        onResetPassword={resetPassword}
         onSuccess={() => {}}
         showToast={toast}
       />

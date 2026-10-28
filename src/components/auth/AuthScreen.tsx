@@ -1,10 +1,9 @@
 import {
   AlertCircle,
   ArrowRight,
-  CheckCircle2,
+  Database,
   Eye,
   EyeOff,
-  KeyRound,
   Lock,
   Mail,
   ShieldAlert,
@@ -14,11 +13,8 @@ import type { AuthResult } from '../../hooks/useCurrentUser';
 import type { UserProfile } from '../../types/ticket';
 import { ThemeToggle } from '../ui/ThemeToggle';
 
-type AuthMode = 'login' | 'forgot';
-
 interface AuthScreenProps {
   onLogin: (email: string, password: string) => Promise<AuthResult> | AuthResult;
-  onResetPassword: (email: string, newPassword: string) => Promise<AuthResult> | AuthResult;
   onSuccess: (user: UserProfile) => void;
   showToast: {
     success: (title: string, message?: string) => void;
@@ -27,21 +23,55 @@ interface AuthScreenProps {
   };
 }
 
-/**
- * Tela de Autenticação Obrigatória (Requisito 1).
- * Não permite auto-cadastro (cadastro livre removido).
- * Apenas:
- * 1. Formulário de Login (E-mail e Senha);
- * 2. Fluxo "Esqueci minha senha / Redefinir";
- * 3. Acesso rápido com os 3 seed users obrigatórios (Presidente, Diretor de RH e Membro de TI).
- */
+interface DemoAccount {
+  name: string;
+  role: string;
+  department: string;
+  email: string;
+  pass: string;
+  badgeClass: string;
+}
+
+const DEMO_ACCOUNTS: DemoAccount[] = [
+  {
+    name: 'Presidente',
+    role: 'Presidente',
+    department: 'Administração',
+    email: 'presidente@gmail.com',
+    pass: 'presidente123',
+    badgeClass: 'border-amber-200 bg-amber-50/80 hover:bg-amber-100 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-200',
+  },
+  {
+    name: 'Vice-pres.',
+    role: 'Vice-presidente',
+    department: 'Adm & Projetos',
+    email: 'vicepresidente@gmail.com',
+    pass: 'vicepresidente123',
+    badgeClass: 'border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-900 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 dark:text-indigo-200',
+  },
+  {
+    name: 'Diretor',
+    role: 'Diretor',
+    department: 'Financeiro',
+    email: 'diretor@gmail.com',
+    pass: 'diretor123',
+    badgeClass: 'border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 dark:text-emerald-200',
+  },
+  {
+    name: 'Membro',
+    role: 'Membro',
+    department: 'RH & Pessoas',
+    email: 'membro@gmail.com',
+    pass: 'membro123',
+    badgeClass: 'border-purple-200 bg-purple-50/80 hover:bg-purple-100 text-purple-900 dark:border-purple-900/60 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 dark:text-purple-200',
+  },
+];
+
 export function AuthScreen({
   onLogin,
-  onResetPassword,
   onSuccess,
   showToast,
 }: AuthScreenProps) {
-  const [mode, setMode] = useState<AuthMode>('login');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -51,26 +81,25 @@ export function AuthScreen({
   const [loginPassword, setLoginPassword] = useState('');
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
-  // Formulário de Redefinição
-  const [resetEmail, setResetEmail] = useState('');
-  const [resetNewPassword, setResetNewPassword] = useState('');
-
   /* ------------------------------- Handlers ------------------------------- */
 
   const handleLoginSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!loginEmail.trim() || !loginPassword.trim()) {
+    const email = loginEmail.trim().toLowerCase();
+    const pass = loginPassword.trim();
+
+    if (!email || !pass) {
       setErrorMsg('Por favor, preencha o e-mail corporativo e a senha.');
       return;
     }
 
     setLoading(true);
     try {
-      const result = await onLogin(loginEmail, loginPassword);
+      const result = await onLogin(email, pass);
       if (!result.success) {
-        setErrorMsg(result.error ?? 'Credenciais inválidas. Verifique seu e-mail e senha.');
+        setErrorMsg(result.error ?? 'E-mail ou senha incorretos.');
       } else if (result.user) {
         showToast.success('Acesso autorizado', `Bem-vindo(a), ${result.user.name}!`);
         onSuccess(result.user);
@@ -80,54 +109,12 @@ export function AuthScreen({
     }
   };
 
-  const handleResetSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  /** Preenche e-mail e senha ao clicar em uma conta de demonstração */
+  const handleSelectDemoAccount = (acc: DemoAccount) => {
     setErrorMsg(null);
-
-    if (!resetEmail.trim() || !resetNewPassword.trim()) {
-      setErrorMsg('Informe o e-mail cadastrado e a nova senha.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const result = await onResetPassword(resetEmail, resetNewPassword);
-      if (!result.success) {
-        setErrorMsg(result.error ?? 'Falha ao redefinir a senha.');
-      } else {
-        showToast.success(
-          'Solicitação enviada!',
-          'Se o e-mail estiver cadastrado, as instruções foram enviadas para sua caixa de entrada.',
-        );
-        setLoginEmail(resetEmail);
-        setMode('login');
-        setErrorMsg(null);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /** Preenchimento e login rápido para contas de demonstração (Seed Users em DEV) */
-  const handleQuickSeed = async (email: string, pass: string = 'Tecno@2026!') => {
-    setErrorMsg(null);
-    setLoginEmail(email);
-    setLoginPassword(pass);
-    setLoading(true);
-    try {
-      const result = await onLogin(email, pass);
-      if (result.success && result.user) {
-        showToast.success(
-          `Conectado como ${result.user.role}`,
-          `Sessão iniciada como ${result.user.name} (${result.user.department}).`,
-        );
-        onSuccess(result.user);
-      } else {
-        setErrorMsg(result.error ?? 'Falha ao autenticar.');
-      }
-    } finally {
-      setLoading(false);
-    }
+    setLoginEmail(acc.email);
+    setLoginPassword(acc.pass);
+    passwordInputRef.current?.focus();
   };
 
   return (
@@ -157,42 +144,21 @@ export function AuthScreen({
           <p className="mt-1 text-xs font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
             Central Corporativa de Service Desk
           </p>
+
+          {/* Aviso fixo e discreto de modo demonstração */}
+          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-[11px] font-medium text-slate-600 shadow-2xs dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400">
+            <Database className="h-3 w-3 text-blue-500" />
+            <span>Modo demonstração: os dados ficam salvos neste navegador</span>
+          </div>
         </div>
 
         {/* Card Principal de Autenticação */}
-        <div className="mt-6 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xl sm:p-8 dark:border-slate-800 dark:bg-slate-900 transition-all">
-          {/* Navegação Simplificada (Apenas Entrar e Redefinir) */}
-          <div className="mb-6 flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80">
-            <button
-              id="tab-login"
-              type="button"
-              onClick={() => {
-                setMode('login');
-                setErrorMsg(null);
-              }}
-              className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
-                mode === 'login'
-                  ? 'bg-white text-blue-700 shadow-xs dark:bg-slate-900 dark:text-blue-400'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-              }`}
-            >
-              Entrar na Plataforma
-            </button>
-            <button
-              id="tab-forgot"
-              type="button"
-              onClick={() => {
-                setMode('forgot');
-                setErrorMsg(null);
-              }}
-              className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
-                mode === 'forgot'
-                  ? 'bg-white text-blue-700 shadow-xs dark:bg-slate-900 dark:text-blue-400'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
-              }`}
-            >
-              Esqueci Minha Senha
-            </button>
+        <div className="mt-5 rounded-2xl border border-slate-200/90 bg-white p-6 shadow-xl sm:p-8 dark:border-slate-800 dark:bg-slate-900 transition-all">
+          <div className="mb-5 border-b border-slate-100 pb-4 dark:border-slate-800 text-center">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Entrar na Plataforma</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Informe suas credenciais para acessar os chamados e serviços
+            </p>
           </div>
 
           {/* Alerta Visual de Erro */}
@@ -207,232 +173,99 @@ export function AuthScreen({
             </div>
           )}
 
-          {/* ==================================================================== */}
-          {/* MODO 1: ENTRAR (LOGIN OBRIGATÓRIO) */}
-          {/* ==================================================================== */}
-          {mode === 'login' && (
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="login-email"
-                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
-                >
-                  E-mail Corporativo
-                </label>
-                <div className="relative">
-                  <Mail className="absolute top-3 left-3 h-4 w-4 text-slate-400" />
-                  <input
-                    id="login-email"
-                    type="email"
-                    required
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="ex: presidente@gmail.com"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-4 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label
-                    htmlFor="login-password"
-                    className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
-                  >
-                    Senha de Acesso
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode('forgot');
-                      setErrorMsg(null);
-                    }}
-                    className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400 cursor-pointer"
-                  >
-                    Esqueci minha senha / Redefinir
-                  </button>
-                </div>
-                <div className="relative">
-                  <Lock className="absolute top-3 left-3 h-4 w-4 text-slate-400" />
-                  <input
-                    id="login-password"
-                    ref={passwordInputRef}
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Digite sua senha"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-10 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute top-2.5 right-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
-                    aria-label={showPassword ? 'Ocultar senha' : 'Ver senha'}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                id="btn-login-submit"
-                type="submit"
-                disabled={loading}
-                className="btn-primary w-full justify-center py-2.5 text-sm font-bold shadow-md shadow-blue-600/20 disabled:opacity-50"
+          {/* Formulário de Login */}
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <div>
+              <label
+                htmlFor="login-email"
+                className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
               >
-                <span>{loading ? 'Acessando...' : 'Acessar Plataforma'}</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
-
-              {/* Botões Rápidos para Contas de Demonstração (Exclusivo para Ambiente de Desenvolvimento) */}
-              {import.meta.env.DEV && (
-                <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
-                  <p className="text-center text-[11px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500 mb-2.5">
-                    Acesso rápido para testes (Seed Dev)
-                  </p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {/* 1. Presidente */}
-                    <button
-                      type="button"
-                      id="quick-login-presidente"
-                      onClick={() => handleQuickSeed('presidente@gmail.com')}
-                      className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 p-2 text-center transition hover:bg-amber-100 dark:border-amber-900/60 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 cursor-pointer"
-                    >
-                      <span className="text-xs font-bold text-amber-900 dark:text-amber-200">Presidente</span>
-                      <span className="text-[10px] text-amber-700 dark:text-amber-400">Administração</span>
-                    </button>
-
-                    {/* 2. Vice-presidente */}
-                    <button
-                      type="button"
-                      id="quick-login-vp"
-                      onClick={() => handleQuickSeed('vicepresidente@tecnosystem.com')}
-                      className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50/80 p-2 text-center transition hover:bg-indigo-100 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 cursor-pointer"
-                    >
-                      <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200">Vice-pres.</span>
-                      <span className="text-[10px] text-indigo-700 dark:text-indigo-400">Adm & Projetos</span>
-                    </button>
-
-                    {/* 3. Diretor de RH */}
-                    <button
-                      type="button"
-                      id="quick-login-rh"
-                      onClick={() => handleQuickSeed('rh@tecnosystem.com')}
-                      className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-purple-200 bg-purple-50/80 p-2 text-center transition hover:bg-purple-100 dark:border-purple-900/60 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 cursor-pointer"
-                    >
-                      <span className="text-xs font-bold text-purple-900 dark:text-purple-200">Diretor RH</span>
-                      <span className="text-[10px] text-purple-700 dark:text-purple-400">RH & Pessoas</span>
-                    </button>
-
-                    {/* 4. Membro de Projetos */}
-                    <button
-                      type="button"
-                      id="quick-login-projetos"
-                      onClick={() => handleQuickSeed('projetos@tecnosystem.com')}
-                      className="flex min-h-[46px] flex-col items-center justify-center rounded-xl border border-blue-200 bg-blue-50/80 p-2 text-center transition hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 cursor-pointer"
-                    >
-                      <span className="text-xs font-bold text-blue-900 dark:text-blue-200">Projetos</span>
-                      <span className="text-[10px] text-blue-700 dark:text-blue-400">Membro</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Informação sobre cadastro */}
-              <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-center text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
-                <span className="flex items-center justify-center gap-1.5 font-medium">
-                  <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-                  <span>Cadastros de novos colaboradores são realizados exclusivamente pela Diretoria e RH.</span>
-                </span>
+                E-mail Corporativo
+              </label>
+              <div className="relative">
+                <Mail className="absolute top-3 left-3 h-4 w-4 text-slate-400" />
+                <input
+                  id="login-email"
+                  type="email"
+                  required
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="ex: presidente@gmail.com"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-4 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
+                />
               </div>
-            </form>
-          )}
+            </div>
 
-          {/* ==================================================================== */}
-          {/* MODO 2: REDEFINIR SENHA (ESQUECI A SENHA) */}
-          {/* ==================================================================== */}
-          {mode === 'forgot' && (
-            <form onSubmit={handleResetSubmit} className="space-y-4">
-              <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-xs text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300">
-                <p className="font-semibold">Recuperação de Credenciais</p>
-                <p className="mt-0.5 text-[11px] text-blue-700 dark:text-blue-400">
-                  Informe o e-mail corporativo cadastrado e defina imediatamente sua nova senha de acesso.
-                </p>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="reset-email"
-                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+            <div>
+              <label
+                htmlFor="login-password"
+                className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
+              >
+                Senha de Acesso
+              </label>
+              <div className="relative">
+                <Lock className="absolute top-3 left-3 h-4 w-4 text-slate-400" />
+                <input
+                  id="login-password"
+                  ref={passwordInputRef}
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="Digite sua senha"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-10 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute top-2.5 right-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
+                  aria-label={showPassword ? 'Ocultar senha' : 'Ver senha'}
                 >
-                  E-mail Corporativo Cadastrado *
-                </label>
-                <div className="relative">
-                  <Mail className="absolute top-3 left-3 h-4 w-4 text-slate-400" />
-                  <input
-                    id="reset-email"
-                    type="email"
-                    required
-                    value={resetEmail}
-                    onChange={(e) => setResetEmail(e.target.value)}
-                    placeholder="ex: ti@tecnosystem.com"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-4 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
-                  />
-                </div>
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
+            </div>
 
-              <div>
-                <label
-                  htmlFor="reset-new-password"
-                  className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
-                >
-                  Nova Senha de Acesso *
-                </label>
-                <div className="relative">
-                  <KeyRound className="absolute top-3 left-3 h-4 w-4 text-slate-400" />
-                  <input
-                    id="reset-new-password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={resetNewPassword}
-                    onChange={(e) => setResetNewPassword(e.target.value)}
-                    placeholder="Digite a nova senha"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-2.5 pr-10 pl-10 text-sm font-medium text-slate-800 transition focus:border-blue-500 focus:bg-white focus:outline-hidden dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-100 dark:focus:border-blue-400 dark:focus:bg-slate-800"
-                  />
+            <button
+              id="btn-login-submit"
+              type="submit"
+              disabled={loading}
+              className="btn-primary w-full justify-center py-2.5 text-sm font-bold shadow-md shadow-blue-600/20 disabled:opacity-50 cursor-pointer"
+            >
+              <span>{loading ? 'Acessando...' : 'Acessar Plataforma'}</span>
+              <ArrowRight className="h-4 w-4" />
+            </button>
+
+            {/* Painel: Contas de Demonstração (4 contas oficiais) */}
+            <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+              <p className="text-center text-[11px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500 mb-2.5">
+                Contas de demonstração (clique para preencher)
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {DEMO_ACCOUNTS.map((acc) => (
                   <button
+                    key={acc.email}
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute top-2.5 right-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
-                    aria-label={showPassword ? 'Ocultar senha' : 'Ver senha'}
+                    id={`quick-login-${acc.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`}
+                    onClick={() => handleSelectDemoAccount(acc)}
+                    className={`flex min-h-[50px] flex-col items-center justify-center rounded-xl border p-2 text-center transition cursor-pointer ${acc.badgeClass}`}
+                    title={`Preencher credenciais de ${acc.name} (${acc.role})`}
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    <span className="text-xs font-bold leading-tight">{acc.name}</span>
+                    <span className="text-[10px] opacity-80 leading-tight mt-0.5">{acc.department}</span>
                   </button>
-                </div>
+                ))}
               </div>
+            </div>
 
-              <button
-                id="btn-reset-submit"
-                type="submit"
-                disabled={loading}
-                className="btn-primary w-full justify-center py-2.5 text-sm font-bold shadow-md shadow-blue-600/20 disabled:opacity-50"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                <span>{loading ? 'Enviando...' : 'Salvar Nova Senha'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('login');
-                  setErrorMsg(null);
-                }}
-                className="w-full text-center text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white cursor-pointer py-1"
-              >
-                Voltar para o Login
-              </button>
-            </form>
-          )}
+            {/* Informação sobre cadastro */}
+            <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-2.5 text-center text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-800/40 dark:text-slate-400">
+              <span className="flex items-center justify-center gap-1.5 font-medium">
+                <ShieldAlert className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                <span>Cadastros de novos colaboradores são realizados exclusivamente pela Diretoria e RH.</span>
+              </span>
+            </div>
+          </form>
         </div>
 
         {/* Rodapé institucional */}
