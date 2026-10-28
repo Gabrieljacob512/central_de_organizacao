@@ -36,7 +36,10 @@ const EVENT_ICONS: Record<Exclude<EventType, 'comment'>, { icon: LucideIcon; cla
   created: { icon: Sparkles, className: 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400' },
   status: { icon: ArrowRightLeft, className: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400' },
   assignment: { icon: UserCheck, className: 'bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-400' },
+  assigned: { icon: UserCheck, className: 'bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-400' },
   update: { icon: PencilLine, className: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400' },
+  attachment: { icon: Paperclip, className: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400' },
+  reopened: { icon: ArrowRightLeft, className: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400' },
 };
 
 type CommentRole = Extract<AuthorRole, 'solicitante' | 'atendente'>;

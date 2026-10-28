@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { subscribeStorage } from '../data/storage';
 import {
   deactivateUser,
   getCurrentUserProfile,
@@ -30,46 +31,56 @@ export interface AuthResult {
 }
 
 /**
- * Hook central de autenticação e sessão do colaborador integrado ao Supabase Auth e Postgres.
+ * Hook central de autenticação e sessão do colaborador integrado ao armazenamento local.
  * Persiste cache sincronizado e valida permissões de acesso com segurança.
  */
 export function useCurrentUser() {
   const [usersList, setUsersList] = useState<UserProfile[]>(loadUsersList);
   const [currentUser, setCurrentUserState] = useState<UserProfile | null>(loadCurrentUser);
 
-  // Sincroniza sessão ativa e lista de colaboradores com o Supabase ao iniciar
+  // Sincroniza sessão ativa e lista de colaboradores ao iniciar e sob alterações no storage
   useEffect(() => {
     let mounted = true;
 
-    getCurrentUserProfile()
-      .then((profile) => {
-        if (!mounted) return;
-        if (profile) {
-          setCurrentUserState(profile);
-          saveCurrentUser(profile);
-          listAllUsers()
-            .then((users) => {
-              if (!mounted) return;
-              if (users.length > 0) {
-                setUsersList(users);
-                saveUsersList(users);
-              }
-            })
-            .catch((err) => {
-              console.warn('[useCurrentUser] Erro ao sincronizar colaboradores com Supabase:', err);
-            });
-        } else {
-          // Se não há sessão ativa no Supabase, limpa o cache local
-          setCurrentUserState(null);
-          saveCurrentUser(null);
-        }
-      })
-      .catch((err) => {
-        console.warn('[useCurrentUser] Não foi possível restaurar sessão do Supabase:', err);
-      });
+    const reload = () => {
+      getCurrentUserProfile()
+        .then((profile) => {
+          if (!mounted) return;
+          if (profile) {
+            setCurrentUserState(profile);
+            saveCurrentUser(profile);
+            listAllUsers()
+              .then((users) => {
+                if (!mounted) return;
+                if (users.length > 0) {
+                  setUsersList(users);
+                  saveUsersList(users);
+                }
+              })
+              .catch((err) => {
+                console.warn('[useCurrentUser] Erro ao sincronizar colaboradores:', err);
+              });
+          } else {
+            setCurrentUserState(null);
+            saveCurrentUser(null);
+          }
+        })
+        .catch((err) => {
+          console.warn('[useCurrentUser] Não foi possível restaurar sessão:', err);
+        });
+    };
+
+    reload();
+
+    const unsubscribe = subscribeStorage((key) => {
+      if (!key || key === 'session' || key === 'users') {
+        reload();
+      }
+    });
 
     return () => {
       mounted = false;
+      unsubscribe();
     };
   }, []);
 

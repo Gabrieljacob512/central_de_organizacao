@@ -1,6 +1,14 @@
 import { z } from 'zod';
-import { supabase } from './supabase';
-import type { Department, UserProfile } from '../types/ticket';
+import {
+  readCollection,
+  writeCollection,
+  StoredUserSchema,
+  StoredSessionSchema,
+  type StoredUser,
+  type StoredSession,
+} from '../data/storage';
+import { seedDemoData } from '../data/seed';
+import type { UserProfile } from '../types/ticket';
 
 export const LoginSchema = z.object({
   email: z.string().email('E-mail corporativo em formato inválido.'),
@@ -18,152 +26,122 @@ export interface AuthProfileResult {
   mustChangePassword?: boolean;
 }
 
-/** Converte o registro da tabela profiles do Supabase para a interface UserProfile do front */
-export function mapDatabaseProfileToUserProfile(
-  profile: {
-    id: string;
-    name: string;
-    email: string;
-    avatar_url: string | null;
-    theme?: string | null;
-    is_active: boolean;
-    must_change_password: boolean;
-    created_at: string;
-    departments?: { code: string; name: string } | null;
-    roles?: { name: string; permissions: string[] } | null;
-  }
-): UserProfile {
-  const roleName = profile.roles?.name || 'Membro';
+export function mapStoredUserToUserProfile(user: StoredUser): UserProfile {
+  const roleName = user.role;
   const isExec = roleName.toLowerCase().includes('presidente');
-  const isVp = roleName.toLowerCase().includes('vice');
+
   return {
-    id: profile.id,
-    name: profile.name,
-    email: profile.email,
-    department: (profile.departments?.code as Department) || (isExec ? 'Administração' : 'Projetos'),
-    secondaryDepartment: isVp ? 'Projetos' : undefined,
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    department: user.department,
+    secondaryDepartment: user.secondaryDepartment,
+    departmentEmail: user.departmentEmail,
     role: roleName,
+    phone: user.phone,
+    startDate: user.startDate,
     isExecutive: isExec,
-    avatarUrl: profile.avatar_url,
-    theme: (profile.theme as any) || 'system',
-    createdAt: profile.created_at,
-    isActive: profile.is_active,
-    mustChangePassword: profile.must_change_password,
-    permissions: profile.roles?.permissions || [],
+    avatarUrl: user.avatarUrl,
+    createdAt: user.createdAt,
+    isActive: user.isActive,
+    mustChangePassword: user.mustChangePassword,
+    permissions: [],
+    departmentMemberships: [
+      {
+        departmentId: `dept-${user.department.toLowerCase()}`,
+        departmentCode: user.department,
+        departmentName: user.department,
+        isDirector: roleName.toLowerCase().includes('diretor') || roleName.toLowerCase() === 'presidente',
+      },
+      ...(user.secondaryDepartment
+        ? [
+            {
+              departmentId: `dept-${user.secondaryDepartment.toLowerCase()}`,
+              departmentCode: user.secondaryDepartment,
+              departmentName: user.secondaryDepartment,
+              isDirector: true,
+            },
+          ]
+        : []),
+    ],
   };
 }
 
-/** Indica se o código roda em modo de desenvolvimento (Vite DEV ou NODE_ENV=development) */
-const IS_DEV: boolean =
-  (typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV)) ||
-  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.NODE_ENV === 'development';
-
 /**
- * Registra no console o erro real do Supabase (código, status e mensagem) somente em desenvolvimento.
- * O usuário final continua vendo apenas a mensagem genérica.
- */
-function logSupabaseErrorDev(context: string, err: unknown): void {
-  if (!IS_DEV || !err) return;
-  const e = err as { code?: string; status?: number; message?: string; details?: string; hint?: string; name?: string };
-  console.error(`[authService:${context}]`, {
-    name: e.name,
-    code: e.code,
-    status: e.status,
-    message: e.message,
-    details: e.details,
-    hint: e.hint,
-  });
-}
-
-/**
- * Autentica o usuário com Supabase Auth e carrega seu perfil correspondente.
- * Se o usuário estiver inativo (is_active = false), o acesso é bloqueado imediatamente.
+ * Autentica o usuário simuladamente contra a coleção users no LocalStorage.
  */
 export async function signIn(email: string, pass: string): Promise<AuthProfileResult> {
+  // Garante que o seed inicial foi carregado se estiver vazio
+  seedDemoData();
+
   const validation = LoginSchema.safeParse({ email, password: pass });
   if (!validation.success) {
     return { success: false, error: validation.error.issues[0]?.message || 'Dados inválidos.' };
   }
 
-  const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
-    email: validation.data.email,
-    password: validation.data.password,
-  });
+  const cleanEmail = validation.data.email.trim().toLowerCase();
+  const cleanPass = validation.data.password.trim();
 
-  if (authErr || !authData.user) {
-    logSupabaseErrorDev('signInWithPassword', authErr ?? { message: 'Resposta sem usuário' });
-    return { success: false, error: 'Credenciais inválidas. Verifique seu e-mail e senha.' };
+  const users = readCollection('users', z.array(StoredUserSchema), []);
+  const found = users.find((u) => u.email.trim().toLowerCase() === cleanEmail);
+
+  if (!found || found.password !== cleanPass) {
+    return { success: false, error: 'E-mail ou senha incorretos.' };
   }
 
-  // Buscar perfil com departamento e permissões
-  const { data: profile, error: profileErr } = await supabase
-    .from('profiles')
-    .select(`
-      id,
-      name,
-      email,
-      avatar_url,
-      is_active,
-      must_change_password,
-      created_at,
-      departments!profiles_department_id_fkey ( code, name ),
-      roles ( name, permissions )
-    `)
-    .eq('id', authData.user.id)
-    .single();
-
-  if (profileErr || !profile) {
-    logSupabaseErrorDev('profiles.select', profileErr ?? { message: `Nenhuma linha em profiles para id=${authData.user.id}` });
-    await supabase.auth.signOut();
-    return { success: false, error: 'Perfil de usuário não encontrado no sistema.' };
-  }
-
-  if (!profile.is_active) {
-    await supabase.auth.signOut();
+  if (!found.isActive) {
     return { success: false, error: 'Esta conta de usuário foi desativada. Entre em contato com a administração.' };
   }
 
-  const userProfile = mapDatabaseProfileToUserProfile(profile as never);
+  // Grava a sessão simulada: { userId, startedAt }
+  const session: StoredSession = {
+    userId: found.id,
+    startedAt: new Date().toISOString(),
+  };
+  writeCollection('session', session);
 
+  const userProfile = mapStoredUserToUserProfile(found);
   return {
     success: true,
     user: userProfile,
-    mustChangePassword: profile.must_change_password,
+    mustChangePassword: found.mustChangePassword,
   };
 }
 
 /** Finaliza a sessão ativa */
 export async function signOut(): Promise<void> {
-  await supabase.auth.signOut();
+  writeCollection('session', null);
+}
+
+/** Obtém o perfil do usuário atualmente autenticado pela sessão ativa (síncrono) */
+export function getCurrentUser(): UserProfile | null {
+  const session = readCollection('session', StoredSessionSchema, null);
+  if (!session || !session.userId) return null;
+
+  const users = readCollection('users', z.array(StoredUserSchema), []);
+  const found = users.find((u) => u.id === session.userId);
+
+  if (!found || !found.isActive) {
+    return null;
+  }
+
+  return mapStoredUserToUserProfile(found);
 }
 
 /** Obtém o perfil do usuário atualmente autenticado pela sessão ativa */
 export async function getCurrentUserProfile(): Promise<UserProfile | null> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const userId = sessionData?.session?.user?.id;
-  if (!userId) return null;
+  seedDemoData();
+  return getCurrentUser();
+}
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select(`
-      id,
-      name,
-      email,
-      avatar_url,
-      is_active,
-      must_change_password,
-      created_at,
-      departments!profiles_department_id_fkey ( code, name ),
-      roles ( name, permissions )
-    `)
-    .eq('id', userId)
-    .single();
-
-  if (!profile || !profile.is_active) {
-    return null;
+/** Simulação de envio de redefinição de senha para demonstração */
+export async function sendPasswordResetEmail(email: string): Promise<{ success: boolean; error?: string }> {
+  const users = readCollection('users', z.array(StoredUserSchema), []);
+  const found = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+  if (!found) {
+    return { success: false, error: 'E-mail não encontrado no sistema.' };
   }
-
-  return mapDatabaseProfileToUserProfile(profile as never);
+  return { success: true };
 }
 
 /** Altera a senha do usuário conectado e remove a flag must_change_password */
@@ -173,23 +151,24 @@ export async function updatePassword(newPassword: string): Promise<{ success: bo
     return { success: false, error: validation.error.issues[0]?.message };
   }
 
-  const { error } = await supabase.auth.updateUser({
-    password: validation.data.newPassword,
+  const session = readCollection('session', StoredSessionSchema, null);
+  if (!session?.userId) {
+    return { success: false, error: 'Nenhuma sessão ativa encontrada.' };
+  }
+
+  const users = readCollection('users', z.array(StoredUserSchema), []);
+  const updated = users.map((u) => {
+    if (u.id === session.userId) {
+      return {
+        ...u,
+        password: validation.data.newPassword,
+        mustChangePassword: false,
+      };
+    }
+    return u;
   });
 
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  // Limpa must_change_password
-  const { data: session } = await supabase.auth.getSession();
-  if (session?.session?.user?.id) {
-    await supabase
-      .from('profiles')
-      .update({ must_change_password: false, updated_at: new Date().toISOString() })
-      .eq('id', session.session.user.id);
-  }
-
+  writeCollection('users', updated);
   return { success: true };
 }
 
@@ -198,91 +177,45 @@ export async function changeUserPasswordWithReauth(
   currentPassword: string,
   newPassword: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const email = sessionData?.session?.user?.email;
-  if (!email) {
+  const session = readCollection('session', StoredSessionSchema, null);
+  if (!session?.userId) {
     return { success: false, error: 'Sessão inválida. Faça login novamente.' };
   }
 
-  // Validação da senha atual via login
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email,
-    password: currentPassword,
-  });
+  const users = readCollection('users', z.array(StoredUserSchema), []);
+  const currentUser = users.find((u) => u.id === session.userId);
 
-  if (signInError) {
+  if (!currentUser || currentUser.password !== currentPassword.trim()) {
     return { success: false, error: 'A senha atual informada está incorreta.' };
   }
 
-  // Atualização com nova senha
   return updatePassword(newPassword);
 }
 
-/** Envia e-mail de recuperação de senha pelo Supabase Auth */
-export async function sendPasswordResetEmail(email: string): Promise<{ success: boolean; error?: string }> {
-  const emailValidation = z.string().email('E-mail inválido.').safeParse(email);
-  if (!emailValidation.success) {
-    return { success: false, error: emailValidation.error.issues[0]?.message };
-  }
-
-  const { error } = await supabase.auth.resetPasswordForEmail(emailValidation.data, {
-    redirectTo: `${window.location.origin}/reset-password`,
-  });
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
-}
-
-/** Lista todos os usuários cadastrados com seus departamentos e papéis */
+/** Lista todos os usuários cadastrados */
 export async function listAllUsers(): Promise<UserProfile[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select(`
-      id,
-      name,
-      email,
-      avatar_url,
-      is_active,
-      must_change_password,
-      created_at,
-      departments!profiles_department_id_fkey ( code, name ),
-      roles ( name, permissions )
-    `)
-    .order('name');
-
-  if (error || !data) {
-    console.error('[authService] Erro ao listar usuários:', error);
-    return [];
-  }
-
-  return data.map((p) => mapDatabaseProfileToUserProfile(p as never));
+  seedDemoData();
+  const users = readCollection('users', z.array(StoredUserSchema), []);
+  return users.map(mapStoredUserToUserProfile).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Desativa um colaborador (soft-delete / is_active = false) sem excluir o registro para integridade da auditoria */
+/** Desativa um colaborador (isActive = false) */
 export async function deactivateUser(userId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ is_active: false, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
+  const users = readCollection('users', z.array(StoredUserSchema), []);
+  const updated = users.map((u) => (u.id === userId ? { ...u, isActive: false } : u));
+  writeCollection('users', updated);
   return { success: true };
 }
 
-/** Reativa um colaborador */
+/** Reativa um colaborador (isActive = true) */
 export async function activateUser(userId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase
-    .from('profiles')
-    .update({ is_active: true, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
+  const users = readCollection('users', z.array(StoredUserSchema), []);
+  const updated = users.map((u) => (u.id === userId ? { ...u, isActive: true } : u));
+  writeCollection('users', updated);
   return { success: true };
+}
+
+/** Função legado mantida para compatibilidade de tipos se necessário */
+export function mapDatabaseProfileToUserProfile(p: any): UserProfile {
+  return mapStoredUserToUserProfile(p);
 }

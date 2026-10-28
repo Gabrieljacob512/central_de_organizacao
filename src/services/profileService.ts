@@ -1,50 +1,35 @@
-import { supabase } from './supabase';
+import { z } from 'zod';
+import {
+  deleteFile,
+  getFile,
+  MAX_FILE_SIZE,
+  saveFile,
+  validateMagicBytes,
+} from '../data/indexedDb';
+import {
+  mutate,
+  readCollection,
+  StoredDepartmentSchema,
+  StoredMembershipSchema,
+  StoredUserSchema,
+  writeCollection,
+} from '../data/storage';
 import type { Department } from '../types/ticket';
+import { getCurrentUser } from './authService';
 
-/**
- * Validação segura de cabeçalho binário (magic bytes) para imagens PNG, JPEG e WebP.
- * Garante que extensões falsas sejam bloqueadas antes do upload.
- */
 export async function validateImageMagicBytes(file: File): Promise<boolean> {
-  const buffer = await file.slice(0, 12).arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-    return true;
-  }
-
-  // JPEG: FF D8 FF
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return true;
-  }
-
-  // WebP: RIFF (bytes 0-3) ... WEBP (bytes 8-11)
-  if (
-    bytes[0] === 0x52 &&
-    bytes[1] === 0x49 &&
-    bytes[2] === 0x46 &&
-    bytes[3] === 0x46 &&
-    bytes[8] === 0x57 &&
-    bytes[9] === 0x45 &&
-    bytes[10] === 0x42 &&
-    bytes[11] === 0x50
-  ) {
-    return true;
-  }
-
-  return false;
+  const check = await validateMagicBytes(file);
+  return check.valid;
 }
 
 /**
- * Upload de avatar no bucket privado 'avatars' sob o caminho {user_id}/{filename}.
- * Limite de 1 MB, tipos png, jpg, webp com validação de magic bytes.
+ * Upload de avatar com armazenamento no IndexedDB e atualização do perfil na coleção users
  */
 export async function uploadAvatar(
   userId: string,
   file: File
 ): Promise<{ success: boolean; avatarUrl?: string; error?: string }> {
-  if (file.size > 1048576) {
+  if (file.size > MAX_FILE_SIZE) {
     return { success: false, error: 'A foto deve ter no máximo 1 MB (1.048.576 bytes).' };
   }
 
@@ -58,55 +43,69 @@ export async function uploadAvatar(
     return { success: false, error: 'Arquivo inválido. O conteúdo binário não corresponde a uma imagem autêntica.' };
   }
 
-  const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
-  const filePath = `${userId}/avatar-${Date.now()}.${fileExt}`;
+  try {
+    const avatarKey = `avatar_${userId}`;
+    // 1. Salvar no IndexedDB
+    await saveFile(avatarKey, file, file.name);
 
-  // 1. Upload para o Supabase Storage
-  const { error: uploadError } = await supabase.storage
-    .from('avatars')
-    .upload(filePath, file, { upsert: true });
+    // 2. Obter URL
+    const fileResult = await getFile(avatarKey);
+    const avatarUrl = fileResult?.url || '';
 
-  if (uploadError) {
-    console.error('[profileService] Erro no upload:', uploadError);
-    return { success: false, error: uploadError.message };
+    // 3. Atualizar usuário na coleção
+    const currentUser = getCurrentUser();
+    mutate({
+      user: currentUser,
+      action: () => {
+        const users = readCollection('users', z.array(StoredUserSchema), []);
+        const updated = users.map((u) => (u.id === userId ? { ...u, avatarUrl } : u));
+        writeCollection('users', updated);
+      },
+      audit: {
+        action: 'AVATAR_UPDATE',
+        details: 'Foto de perfil atualizada',
+      },
+    });
+
+    return { success: true, avatarUrl };
+  } catch (err: any) {
+    console.error('[profileService] Erro no upload de avatar:', err);
+    return { success: false, error: err?.message || 'Falha ao salvar avatar no navegador.' };
   }
-
-  // 2. Obter URL pública
-  const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
-  const avatarUrl = publicUrlData.publicUrl;
-
-  // 3. Atualizar tabela profiles
-  const { error: dbError } = await supabase
-    .from('profiles')
-    .update({ avatar_url: avatarUrl })
-    .eq('id', userId);
-
-  if (dbError) {
-    return { success: false, error: dbError.message };
-  }
-
-  return { success: true, avatarUrl };
 }
 
 /**
- * Remove a foto de perfil do usuário e limpa o campo avatar_url.
+ * Remove a foto de perfil do usuário e limpa o campo avatarUrl.
  */
 export async function removeAvatar(userId: string): Promise<{ success: boolean; error?: string }> {
-  const { error: dbError } = await supabase
-    .from('profiles')
-    .update({ avatar_url: null })
-    .eq('id', userId);
+  try {
+    const avatarKey = `avatar_${userId}`;
+    try {
+      await deleteFile(avatarKey);
+    } catch {}
 
-  if (dbError) {
-    return { success: false, error: dbError.message };
+    const currentUser = getCurrentUser();
+    mutate({
+      user: currentUser,
+      action: () => {
+        const users = readCollection('users', z.array(StoredUserSchema), []);
+        const updated = users.map((u) => (u.id === userId ? { ...u, avatarUrl: undefined } : u));
+        writeCollection('users', updated);
+      },
+      audit: {
+        action: 'AVATAR_REMOVE',
+        details: 'Foto de perfil removida',
+      },
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Falha ao remover avatar.' };
   }
-
-  return { success: true };
 }
 
 /**
- * Atualiza o nome, tema e opcionalmente o departamento do perfil.
- * A alteração de departamento é bloqueada no banco se o usuário não possuir profile.change_department.
+ * Atualiza o nome e opcionalmente o departamento do perfil.
  */
 export async function updateProfileData(
   userId: string,
@@ -116,38 +115,78 @@ export async function updateProfileData(
     theme?: 'light' | 'dark' | 'system';
   }
 ): Promise<{ success: boolean; error?: string }> {
-  const payload: any = { updated_at: new Date().toISOString() };
-  if (updates.name !== undefined) payload.name = updates.name.trim();
-  if (updates.theme !== undefined) payload.theme = updates.theme;
+  try {
+    const currentUser = getCurrentUser();
 
-  if (updates.department) {
-    const { data: dept } = await supabase
-      .from('departments')
-      .select('id')
-      .eq('code', updates.department)
-      .maybeSingle();
+    mutate({
+      user: currentUser,
+      action: () => {
+        const users = readCollection('users', z.array(StoredUserSchema), []);
+        const updated = users.map((u) => {
+          if (u.id !== userId) return u;
+          return {
+            ...u,
+            name: updates.name ? updates.name.trim() : u.name,
+            department: updates.department || u.department,
+          };
+        });
+        writeCollection('users', updated);
 
-    if (dept) {
-      payload.department_id = dept.id;
-    }
+        // Se o departamento mudou, atualizar memberships
+        if (updates.department) {
+          const departments = readCollection('departments', z.array(StoredDepartmentSchema), []);
+          const dept = departments.find((d) => d.code === updates.department);
+          const deptId = dept?.id || `dept-${updates.department.toLowerCase()}`;
+
+          const memberships = readCollection('memberships', z.array(StoredMembershipSchema), []);
+          const updatedMemberships = memberships.map((m) =>
+            m.userId === userId
+              ? { ...m, departmentId: deptId, departmentCode: updates.department! }
+              : m
+          );
+          writeCollection('memberships', updatedMemberships);
+        }
+      },
+      audit: {
+        action: 'PROFILE_UPDATE',
+        details: `Perfil atualizado: ${updates.name || ''} ${updates.department ? `(${updates.department})` : ''}`,
+      },
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao atualizar perfil.' };
   }
-
-  const { error } = await supabase.from('profiles').update(payload).eq('id', userId);
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
 }
 
 /**
- * Solicita a alteração de e-mail no Supabase Auth.
- * Dispara e-mail de confirmação para o novo endereço.
+ * Atualização simulada de e-mail corporativo.
  */
 export async function requestEmailChange(newEmail: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.auth.updateUser({ email: newEmail });
-  if (error) {
-    return { success: false, error: error.message };
+  try {
+    const cleanEmail = newEmail.trim().toLowerCase();
+    const currentUser = getCurrentUser();
+    if (!currentUser) return { success: false, error: 'Usuário não conectado.' };
+
+    const users = readCollection('users', z.array(StoredUserSchema), []);
+    if (users.some((u) => u.id !== currentUser.id && u.email.toLowerCase() === cleanEmail)) {
+      return { success: false, error: 'Este e-mail já está em uso.' };
+    }
+
+    mutate({
+      user: currentUser,
+      action: () => {
+        const updated = users.map((u) => (u.id === currentUser.id ? { ...u, email: cleanEmail } : u));
+        writeCollection('users', updated);
+      },
+      audit: {
+        action: 'EMAIL_CHANGE',
+        details: `E-mail alterado para ${cleanEmail}`,
+      },
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Falha ao alterar e-mail.' };
   }
-  return { success: true };
 }

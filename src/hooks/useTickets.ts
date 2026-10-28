@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { SERVICE_DESK_NAME } from '../constants/config';
-import { loadTickets, saveTickets } from '../services/storage';
+import { subscribeStorage } from '../data/storage';
+import { loadTickets } from '../services/storage';
 import {
   fetchTickets,
   createTicket as createTicketInDb,
@@ -75,29 +76,35 @@ export function useTickets(
 ) {
   const [tickets, setTickets] = useState<Ticket[]>(loadTickets);
 
-  // Sincroniza os chamados do banco de dados (respeitando o RLS do usuário ativo)
+  // Sincroniza os chamados do armazenamento local reativamente
   useEffect(() => {
     let mounted = true;
-    fetchTickets()
-      .then((dbTickets) => {
-        if (!mounted) return;
-        if (dbTickets.length > 0) {
-          setTickets(dbTickets);
-          saveTickets(dbTickets);
-        }
-      })
-      .catch((err) => {
-        console.warn('[useTickets] Erro ao carregar chamados do Supabase:', err);
-      });
+    const reload = () => {
+      fetchTickets()
+        .then((dbTickets) => {
+          if (!mounted) return;
+          if (dbTickets.length > 0) {
+            setTickets(dbTickets);
+          }
+        })
+        .catch((err) => {
+          console.warn('[useTickets] Erro ao carregar chamados:', err);
+        });
+    };
+
+    reload();
+
+    const unsubscribe = subscribeStorage((key) => {
+      if (!key || key === 'tickets') {
+        reload();
+      }
+    });
 
     return () => {
       mounted = false;
+      unsubscribe();
     };
   }, [currentUser?.id]);
-
-  useEffect(() => {
-    saveTickets(tickets);
-  }, [tickets]);
 
   const performer = currentUser
     ? `${currentUser.name} [${currentUser.role}] (${currentUser.email})`

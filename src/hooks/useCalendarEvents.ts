@@ -50,7 +50,7 @@ export function useCalendarEvents({
         }
       })
       .catch((err) => {
-        console.warn('[useCalendarEvents] Erro ao sincronizar eventos com Supabase:', err);
+        console.warn('[useCalendarEvents] Erro ao sincronizar eventos:', err);
       });
 
     return () => {

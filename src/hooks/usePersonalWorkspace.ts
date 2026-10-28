@@ -33,7 +33,7 @@ export function usePersonalWorkspace(currentUser: UserProfile | null) {
           }
         })
         .catch((err) => {
-          console.warn('[usePersonalWorkspace] Erro ao carregar notas do Supabase:', err);
+          console.warn('[usePersonalWorkspace] Erro ao carregar notas:', err);
         });
       return () => {
         mounted = false;
@@ -48,7 +48,7 @@ export function usePersonalWorkspace(currentUser: UserProfile | null) {
         const next = updater(prev);
         savePrivateWorkspace(email, next);
         savePrivateNotesAndTasks(next.notes, next.tasks).catch((err) => {
-          console.error('[usePersonalWorkspace] Erro ao persistir notas no Supabase:', err);
+          console.error('[usePersonalWorkspace] Erro ao persistir notas:', err);
         });
         return next;
       });

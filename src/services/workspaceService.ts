@@ -1,10 +1,16 @@
-import { supabase } from './supabase';
+import { z } from 'zod';
+import {
+  readCollection,
+  StoredEventSchema,
+  StoredSettingsSchema,
+  writeCollection,
+} from '../data/storage';
 import type { PersonalTask, PersonalWorkspaceData } from '../types/calendar';
+import { getCurrentUser } from './authService';
 
 export async function fetchPrivateWorkspace(): Promise<PersonalWorkspaceData> {
-  const { data: session } = await supabase.auth.getSession();
-  const userId = session?.session?.user?.id;
-  if (!userId) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) {
     return {
       notes: '',
       tasks: [],
@@ -13,67 +19,74 @@ export async function fetchPrivateWorkspace(): Promise<PersonalWorkspaceData> {
     };
   }
 
-  const { data: noteRow } = await supabase
-    .from('private_notes')
-    .select('title, content, tasks, updated_at')
-    .eq('user_id', userId)
-    .maybeSingle();
+  try {
+    const settings = readCollection('settings', StoredSettingsSchema, {});
+    const workspaceKey = `workspace_${currentUser.id}`;
+    const workspaceData = settings[workspaceKey] as
+      | { notes?: string; tasks?: PersonalTask[]; updatedAt?: string }
+      | undefined;
 
-  // Buscar eventos privados do usuário
-  const { data: eventsData } = await supabase
-    .from('calendar_events')
-    .select('*')
-    .eq('scope', 'private')
-    .eq('created_by_id', userId)
-    .order('date');
+    // Buscar eventos privados do usuário
+    const allEvents = readCollection('events', z.array(StoredEventSchema), []);
+    const userEvents = allEvents.filter((e) => e.createdBy === currentUser.id && !e.isGlobal);
 
-  const privateEvents = (eventsData || []).map((e) => ({
-    id: e.id,
-    title: e.title,
-    description: e.description || undefined,
-    date: e.date,
-    time: e.time || undefined,
-    scope: 'private' as const,
-    category: e.category as never,
-    createdById: e.created_by_id,
-    createdByName: e.created_by_name,
-    createdByEmail: e.created_by_email,
-    createdAt: e.created_at,
-  }));
+    const privateEvents = userEvents.map((e) => ({
+      id: e.id,
+      title: e.title,
+      description: e.description || undefined,
+      date: e.startDate.substring(0, 10),
+      time: e.startDate.length > 10 ? e.startDate.substring(11, 16) : undefined,
+      scope: 'private' as const,
+      category: 'outros' as never,
+      createdById: e.createdBy,
+      createdByName: currentUser.name,
+      createdByEmail: currentUser.email,
+      createdAt: e.createdAt,
+    }));
 
-  const tasks = Array.isArray(noteRow?.tasks) ? (noteRow.tasks as unknown as PersonalTask[]) : [];
-
-  return {
-    notes: noteRow?.content || '',
-    tasks,
-    privateEvents,
-    updatedAt: noteRow?.updated_at || new Date().toISOString(),
-  };
+    return {
+      notes: workspaceData?.notes || '',
+      tasks: workspaceData?.tasks || [],
+      privateEvents,
+      updatedAt: workspaceData?.updatedAt || new Date().toISOString(),
+    };
+  } catch (err) {
+    console.error('[workspaceService] Erro ao buscar workspace privado:', err);
+    return {
+      notes: '',
+      tasks: [],
+      privateEvents: [],
+      updatedAt: new Date().toISOString(),
+    };
+  }
 }
 
 export async function savePrivateNotesAndTasks(
   notes: string,
   tasks: PersonalTask[]
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: session } = await supabase.auth.getSession();
-  const userId = session?.session?.user?.id;
-  if (!userId) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) {
     return { success: false, error: 'Usuário não autenticado.' };
   }
 
-  const { error } = await supabase
-    .from('private_notes')
-    .upsert({
-      user_id: userId,
-      title: 'Anotações Pessoais',
-      content: notes,
-      tasks: tasks as never,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' });
+  try {
+    const settings = readCollection('settings', StoredSettingsSchema, {});
+    const workspaceKey = `workspace_${currentUser.id}`;
 
-  if (error) {
-    return { success: false, error: error.message };
+    const updated = {
+      notes,
+      tasks,
+      updatedAt: new Date().toISOString(),
+    };
+
+    writeCollection('settings', {
+      ...settings,
+      [workspaceKey]: updated,
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Falha ao salvar notas e tarefas.' };
   }
-
-  return { success: true };
 }

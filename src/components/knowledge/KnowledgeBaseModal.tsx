@@ -28,7 +28,7 @@ export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
       !search ||
       a.title.toLowerCase().includes(search.toLowerCase()) ||
       a.content.toLowerCase().includes(search.toLowerCase()) ||
-      a.tags.some((t) => t.toLowerCase().includes(search.toLowerCase()));
+      Boolean(a.tags?.some((t) => t.toLowerCase().includes(search.toLowerCase())));
 
     const matchesCategory = selectedCategory === 'all' || a.category === selectedCategory;
     return matchesSearch && matchesCategory;

@@ -69,7 +69,6 @@ export default function App() {
     login,
     addUser,
     deleteUser,
-    resetPassword,
     changePassword,
     updateCurrentUser,
     logout,
@@ -458,7 +457,7 @@ export default function App() {
       </main>
 
       <footer className="border-t border-slate-200 bg-white px-4 py-4 text-center text-xs text-slate-500 transition-colors duration-200 sm:px-6 lg:px-8 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-        Tecno System · Sistema de Service Desk & Gestão de Incidentes · PostgreSQL, Supabase RLS & Edge Functions
+        Tecno System · Central de Service Desk & Gestão de Incidentes · Modo Demonstração Local
       </footer>
 
       {/* Modais e Painéis Auxiliares */}

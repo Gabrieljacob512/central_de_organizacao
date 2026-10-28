@@ -1,32 +1,26 @@
-import { INITIAL_USERS, STORAGE_KEYS } from '../constants/config';
-import { buildSeedTickets } from '../data/seed';
-import type { AuditLog, Ticket, UserProfile, ViewMode } from '../types/ticket';
+import { z } from 'zod';
+import { seedDemoData } from '../data/seed';
+import {
+  readCollection,
+  StoredAuditSchema,
+  StoredSessionSchema,
+  StoredTicketSchema,
+  StoredUserSchema,
+  writeCollection,
+  type StoredAudit,
+  type StoredUser,
+} from '../data/storage';
+import type { AuditAction, AuditLog, Ticket, UserProfile, ViewMode } from '../types/ticket';
 import { generateId } from '../utils/id';
 
-/**
- * Camada de persistência baseada em LocalStorage.
- * Gerencia chamados, usuário ativo, lista de colaboradores e trilha de auditoria.
- */
-
-function isTicketArray(value: unknown): value is Ticket[] {
-  return (
-    Array.isArray(value) &&
-    value.every(
-      (item) =>
-        typeof item === 'object' &&
-        item !== null &&
-        typeof (item as Ticket).id === 'string' &&
-        typeof (item as Ticket).title === 'string' &&
-        Array.isArray((item as Ticket).history),
-    )
-  );
-}
+const VIEW_STORAGE_KEY = 'tecno.v1.view';
+const CHAMADOS_VIEW_KEY = 'tecno.v1.chamados_view';
 
 /* ----------------------------- Tickets ----------------------------- */
 
 export function saveTickets(tickets: Ticket[]): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.tickets, JSON.stringify(tickets));
+    writeCollection('tickets', tickets);
   } catch (error) {
     console.error('[Service Desk] Falha ao salvar chamados no LocalStorage.', error);
   }
@@ -34,52 +28,92 @@ export function saveTickets(tickets: Ticket[]): void {
 
 export function loadTickets(): Ticket[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.tickets);
-    if (raw !== null) {
-      const parsed: unknown = JSON.parse(raw);
-      if (isTicketArray(parsed)) return parsed;
+    seedDemoData();
+    const stored = readCollection('tickets', z.array(StoredTicketSchema), []);
+    if (stored.length > 0) {
+      return stored as Ticket[];
     }
   } catch (error) {
-    console.warn('[Service Desk] Dados inválidos no LocalStorage. Recarregando dados de demonstração.', error);
+    console.warn('[Service Desk] Falha ao carregar chamados.', error);
   }
 
-  const seed = buildSeedTickets();
-  saveTickets(seed);
-  return seed;
+  return [];
 }
 
 export function loadViewMode(): ViewMode {
-  const saved = localStorage.getItem(STORAGE_KEYS.view);
-  if (
-    saved &&
-    ['overview', 'tickets', 'my-tickets', 'metrics', 'workspace', 'calendar', 'audit', 'settings', 'table', 'kanban'].includes(saved)
-  ) {
-    return saved as ViewMode;
-  }
+  try {
+    const saved = localStorage.getItem(VIEW_STORAGE_KEY);
+    if (
+      saved &&
+      [
+        'overview',
+        'tickets',
+        'my-tickets',
+        'metrics',
+        'workspace',
+        'calendar',
+        'audit',
+        'settings',
+        'table',
+        'kanban',
+      ].includes(saved)
+    ) {
+      return saved as ViewMode;
+    }
+  } catch {}
   return 'overview';
 }
 
 export function saveViewMode(view: ViewMode): void {
-  localStorage.setItem(STORAGE_KEYS.view, view);
+  try {
+    localStorage.setItem(VIEW_STORAGE_KEY, view);
+  } catch {}
 }
 
 export function loadChamadosViewPreference(): 'table' | 'kanban' {
   if (typeof window !== 'undefined' && window.innerWidth < 640) {
     return 'table'; // No celular o padrão é Lista
   }
-  const saved = localStorage.getItem(STORAGE_KEYS.chamadosView);
-  return saved === 'kanban' ? 'kanban' : 'table';
+  try {
+    const saved = localStorage.getItem(CHAMADOS_VIEW_KEY);
+    return saved === 'kanban' ? 'kanban' : 'table';
+  } catch {
+    return 'table';
+  }
 }
 
 export function saveChamadosViewPreference(view: 'table' | 'kanban'): void {
-  localStorage.setItem(STORAGE_KEYS.chamadosView, view);
+  try {
+    localStorage.setItem(CHAMADOS_VIEW_KEY, view);
+  } catch {}
 }
 
 /* --------------------------- Usuários (Sessão) --------------------------- */
 
 export function saveUsersList(users: UserProfile[]): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.usersList, JSON.stringify(users));
+    const currentUsers = readCollection('users', z.array(StoredUserSchema), []);
+    // Mesclar preservando senhas
+    const passwordMap = new Map(currentUsers.map((u) => [u.id, u.password]));
+
+    const storedUsers: StoredUser[] = users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      password: passwordMap.get(u.id) || 'demo123',
+      department: u.department,
+      secondaryDepartment: u.secondaryDepartment,
+      departmentEmail: u.departmentEmail,
+      role: u.role,
+      phone: u.phone,
+      startDate: u.startDate,
+      isActive: u.isActive ?? true,
+      mustChangePassword: u.mustChangePassword ?? false,
+      avatarUrl: u.avatarUrl || undefined,
+      createdAt: u.createdAt || new Date().toISOString(),
+    }));
+
+    writeCollection('users', storedUsers);
   } catch (error) {
     console.error('[Service Desk] Falha ao salvar lista de usuários.', error);
   }
@@ -87,53 +121,38 @@ export function saveUsersList(users: UserProfile[]): void {
 
 export function loadUsersList(): UserProfile[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.usersList);
-    if (raw !== null) {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Normaliza para garantir propriedades obrigatórias role, password e departmentEmail
-        const users = (parsed as UserProfile[]).map((u) => ({
-          ...u,
-          departmentEmail:
-            u.departmentEmail ??
-            (u.email ? `${(u.department || 'Projetos').toLowerCase()}@tecnosystem.com` : 'contato@tecnosystem.com'),
-          role:
-            u.role ??
-            (u.email === 'presidente@gmail.com' || u.email === 'presidente@tecnosystem.com'
-              ? 'Presidente'
-              : 'Membro'),
-        }));
-
-        // Garante a existência dos três seed users obrigatórios (Presidente, Diretor de RH, Membro de Projetos)
-        const requiredSeeds = INITIAL_USERS.slice(0, 3);
-        const additions: UserProfile[] = [];
-
-        for (const seed of requiredSeeds) {
-          const exists = users.some((u) => u.email.toLowerCase() === seed.email.toLowerCase());
-          if (!exists) {
-            additions.push(seed);
-          }
-        }
-
-        const finalList = [...additions, ...users];
-        saveUsersList(finalList);
-        return finalList;
-      }
-    }
+    seedDemoData();
+    const stored = readCollection('users', z.array(StoredUserSchema), []);
+    return stored.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      department: u.department,
+      secondaryDepartment: u.secondaryDepartment,
+      departmentEmail: u.departmentEmail || `${u.department.toLowerCase()}@tecnosystem.com`,
+      role: u.role,
+      phone: u.phone,
+      startDate: u.startDate,
+      isActive: u.isActive,
+      mustChangePassword: u.mustChangePassword,
+      avatarUrl: u.avatarUrl,
+      createdAt: u.createdAt,
+    }));
   } catch (error) {
-    console.warn('[Service Desk] Erro ao carregar usuários salvos.', error);
+    console.warn('[Service Desk] Erro ao carregar usuários.', error);
+    return [];
   }
-
-  saveUsersList(INITIAL_USERS);
-  return INITIAL_USERS;
 }
 
 export function saveCurrentUser(user: UserProfile | null): void {
   try {
     if (user) {
-      localStorage.setItem(STORAGE_KEYS.currentUser, JSON.stringify(user));
+      writeCollection('session', {
+        userId: user.id,
+        startedAt: new Date().toISOString(),
+      });
     } else {
-      localStorage.removeItem(STORAGE_KEYS.currentUser);
+      writeCollection('session', null);
     }
   } catch (error) {
     console.error('[Service Desk] Falha ao salvar usuário ativo.', error);
@@ -142,32 +161,49 @@ export function saveCurrentUser(user: UserProfile | null): void {
 
 export function loadCurrentUser(): UserProfile | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.currentUser);
-    if (raw !== null) {
-      const parsed: unknown = JSON.parse(raw);
-      if (parsed && typeof (parsed as UserProfile).id === 'string') {
-        const u = parsed as UserProfile;
-        return {
-          ...u,
-          departmentEmail:
-            u.departmentEmail ?? `${(u.department || 'Projetos').toLowerCase()}@tecnosystem.com`,
-          role: u.role ?? 'Membro',
-        };
-      }
-    }
+    seedDemoData();
+    const session = readCollection('session', StoredSessionSchema, null);
+    if (!session?.userId) return null;
+
+    const users = readCollection('users', z.array(StoredUserSchema), []);
+    const found = users.find((u) => u.id === session.userId);
+    if (!found) return null;
+
+    return {
+      id: found.id,
+      name: found.name,
+      email: found.email,
+      department: found.department,
+      secondaryDepartment: found.secondaryDepartment,
+      departmentEmail: found.departmentEmail || `${found.department.toLowerCase()}@tecnosystem.com`,
+      role: found.role,
+      phone: found.phone,
+      startDate: found.startDate,
+      isActive: found.isActive,
+      mustChangePassword: found.mustChangePassword,
+      avatarUrl: found.avatarUrl,
+      createdAt: found.createdAt,
+    };
   } catch (error) {
     console.warn('[Service Desk] Erro ao carregar usuário ativo.', error);
+    return null;
   }
-
-  // Auth Guard: se não houver login ativo salvo, retorna null para exibir a tela de autenticação
-  return null;
 }
 
 /* ----------------------- Trilha de Auditoria ----------------------- */
 
 export function saveAuditLogs(logs: AuditLog[]): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.auditLogs, JSON.stringify(logs));
+    const stored: StoredAudit[] = logs.map((l) => ({
+      id: l.id,
+      action: l.action,
+      ticketId: l.ticketId || null,
+      ticketSnapshotTitle: l.ticketTitle || null,
+      performedBy: l.performedBy,
+      details: l.details,
+      createdAt: l.timestamp,
+    }));
+    writeCollection('audit', stored);
   } catch (error) {
     console.error('[Service Desk] Falha ao salvar logs de auditoria.', error);
   }
@@ -175,66 +211,21 @@ export function saveAuditLogs(logs: AuditLog[]): void {
 
 export function loadAuditLogs(): AuditLog[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.auditLogs);
-    if (raw !== null) {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed as AuditLog[];
-    }
+    seedDemoData();
+    const stored = readCollection('audit', z.array(StoredAuditSchema), []);
+    return stored.map((l) => ({
+      id: l.id,
+      ticketId: l.ticketId || undefined,
+      ticketTitle: l.ticketSnapshotTitle || undefined,
+      action: l.action as AuditAction,
+      performedBy: l.performedBy,
+      details: l.details,
+      timestamp: l.createdAt,
+    }));
   } catch (error) {
     console.warn('[Service Desk] Erro ao carregar logs de auditoria.', error);
+    return [];
   }
-
-  // Logs iniciais baseados nos chamados de demonstração
-  const initialLogs: AuditLog[] = [
-    {
-      id: 'log-seed-01',
-      ticketId: 'TS-1001',
-      ticketTitle: 'Notebook não liga após atualização do Windows',
-      action: 'CRIACAO',
-      performedBy: 'Mariana Souza (mariana.souza@tecnosystem.com.br)',
-      details: 'Chamado TS-1001 aberto para o departamento TI com prioridade Alta',
-      timestamp: new Date(Date.now() - 3 * 3600000).toISOString(),
-    },
-    {
-      id: 'log-seed-02',
-      ticketId: 'TS-1001',
-      ticketTitle: 'Notebook não liga após atualização do Windows',
-      action: 'ATRIBUICAO_DEPARTAMENTO',
-      performedBy: 'Service Desk (sistema@tecnosystem.com.br)',
-      details: 'Chamado atribuído a Carlos Mendes da equipe TI',
-      timestamp: new Date(Date.now() - 2.8 * 3600000).toISOString(),
-    },
-    {
-      id: 'log-seed-03',
-      ticketId: 'TS-1001',
-      ticketTitle: 'Notebook não liga após atualização do Windows',
-      action: 'ALTERACAO_STATUS',
-      performedBy: 'Carlos Mendes (carlos.mendes@tecnosystem.com.br)',
-      details: 'Status alterado de Aberto para Em Andamento',
-      timestamp: new Date(Date.now() - 2.7 * 3600000).toISOString(),
-    },
-    {
-      id: 'log-seed-04',
-      ticketId: 'TS-1002',
-      ticketTitle: 'Reembolso de despesas de viagem — Congresso em São Paulo',
-      action: 'CRIACAO',
-      performedBy: 'Bruno Carvalho (bruno.carvalho@tecnosystem.com.br)',
-      details: 'Chamado TS-1002 aberto para o departamento Financeiro com prioridade Média',
-      timestamp: new Date(Date.now() - 20 * 3600000).toISOString(),
-    },
-    {
-      id: 'log-seed-05',
-      ticketId: 'TS-1004',
-      ticketTitle: 'Ar-condicionado da sala de reuniões 2 vazando água',
-      action: 'RESOLUCAO',
-      performedBy: 'Eduardo Ferreira (eduardo.ferreira@tecnosystem.com.br)',
-      details: 'Chamado TS-1004 marcado como Resolvido',
-      timestamp: new Date(Date.now() - 12 * 3600000).toISOString(),
-    },
-  ];
-
-  saveAuditLogs(initialLogs);
-  return initialLogs;
 }
 
 export function recordAuditLog(log: Omit<AuditLog, 'id' | 'timestamp'>): AuditLog {
@@ -245,7 +236,7 @@ export function recordAuditLog(log: Omit<AuditLog, 'id' | 'timestamp'>): AuditLo
   };
 
   const logs = loadAuditLogs();
-  const updated = [newLog, ...logs].slice(0, 500); // mantém os últimos 500 logs
+  const updated = [newLog, ...logs].slice(0, 500);
   saveAuditLogs(updated);
   return newLog;
 }

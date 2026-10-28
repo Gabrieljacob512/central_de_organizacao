@@ -1,142 +1,79 @@
-import { supabase } from './supabase';
+import { z } from 'zod';
+import {
+  getFile,
+  MAX_FILE_SIZE,
+  saveFile,
+  validateMagicBytes,
+} from '../data/indexedDb';
+import {
+  formatBRL,
+  mutate,
+  parseBRL,
+  readCollection,
+  StoredAttachmentMetaSchema,
+  StoredFinanceEntrySchema,
+  StoredFinanceMonthSchema,
+  StoredFinanceProjectSchema,
+  writeCollection,
+  type StoredAttachmentMeta,
+  type StoredFinanceEntry,
+  type StoredFinanceMonth,
+  type StoredFinanceProject,
+} from '../data/storage';
 import type {
   FinanceAttachment,
   FinanceEntry,
   FinanceMonth,
   FinanceMonthProject,
 } from '../types/ticket';
+import { getCurrentUser } from './authService';
 
-export const MAX_FINANCE_FILE_SIZE = 1_048_576; // 1 MB estrito
+export const MAX_FINANCE_FILE_SIZE = MAX_FILE_SIZE; // 1 MB estrito
 
-/**
- * Converte centavos inteiros para formato de moeda brasileira (R$).
- */
 export function formatCentsToBRL(cents: number): string {
-  const value = (cents || 0) / 100;
-  return value.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatBRL(cents);
 }
 
-/**
- * Converte valor digitado (ex.: "1.842,30" ou "1842.30" ou "1842") em centavos inteiros.
- */
 export function parseBRLToCents(input: string | number): number {
-  if (typeof input === 'number') return Math.round(input * 100);
-  if (!input) return 0;
-
-  // Remove caracteres que não sejam dígitos, vírgula ou ponto
-  const cleaned = input.trim().replace(/[^0-9,\.-]/g, '');
-
-  // Tratar formato brasileiro: "1.234,56"
-  if (cleaned.includes(',')) {
-    const standardized = cleaned.replace(/\./g, '').replace(',', '.');
-    const parsed = parseFloat(standardized);
-    return isNaN(parsed) ? 0 : Math.round(parsed * 100);
-  }
-
-  const parsed = parseFloat(cleaned);
-  return isNaN(parsed) ? 0 : Math.round(parsed * 100);
+  return parseBRL(input);
 }
 
-/**
- * Validação rigorosa de arquivo (1 MB máx e magic bytes para PDF, PNG e JPEG).
- */
 export async function validateFinanceFileMagicBytes(file: File): Promise<{ valid: boolean; error?: string }> {
-  if (file.size > MAX_FINANCE_FILE_SIZE) {
-    return {
-      valid: false,
-      error: `Arquivo excede o limite máximo permitido de 1 MB (${(file.size / 1024 / 1024).toFixed(2)} MB).`,
-    };
-  }
-
-  const buffer = await file.slice(0, 8).arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-
-  // PDF: %PDF (25 50 44 46)
-  if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
-    return { valid: true };
-  }
-
-  // PNG: 89 50 4E 47
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-    return { valid: true };
-  }
-
-  // JPEG: FF D8 FF
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return { valid: true };
-  }
-
-  return {
-    valid: false,
-    error: 'Formato inválido. São permitidos apenas comprovantes autênticos em PDF, PNG ou JPEG.',
-  };
+  return validateMagicBytes(file);
 }
 
 /**
- * Busca todas as competências cadastradas com seus totais.
+ * Busca todas as competências cadastradas com seus totais calculados a partir dos lançamentos.
  */
 export async function fetchFinanceMonths(): Promise<FinanceMonth[]> {
   try {
-    const { data: months, error } = await (supabase.from('vw_finance_monthly_summary' as any) as any)
-      .select('*')
-      .order('competence', { ascending: false });
+    const months = readCollection('financeMonths', z.array(StoredFinanceMonthSchema), []);
+    const entries = readCollection('financeEntries', z.array(StoredFinanceEntrySchema), []);
 
-    if (error || !months || months.length === 0) {
-      // Fallback para tabela direta
-      const { data: directMonths } = await (supabase.from('finance_months' as any) as any)
-        .select('*')
-        .order('competence', { ascending: false });
+    // Ordenar decrescente por competência
+    const sortedMonths = [...months].sort((a, b) => b.competence.localeCompare(a.competence));
 
-      if (directMonths && directMonths.length > 0) {
-        return directMonths.map((m: any) => ({
-          id: m.id,
-          competence: m.competence,
-          isClosed: Boolean(m.is_closed),
-          closedAt: m.closed_at,
-          closedBy: m.closed_by,
-          totalRevenueCents: 0,
-          totalExpenseCents: 0,
-          balanceCents: 0,
-        }));
-      }
+    return sortedMonths.map((m) => {
+      const monthEntries = entries.filter((e) => e.monthId === m.id || e.competence === m.competence);
+      const totalRevenueCents = monthEntries
+        .filter((e) => e.type === 'gain')
+        .reduce((sum, e) => sum + e.amountCents, 0);
 
-      // Dados demo se tabela vazia
-      return [
-        {
-          id: 'month-2026-10',
-          competence: '2026-10',
-          isClosed: false,
-          totalRevenueCents: 4200000,
-          totalExpenseCents: 505000,
-          balanceCents: 3695000,
-        },
-        {
-          id: 'month-2026-09',
-          competence: '2026-09',
-          isClosed: true,
-          closedAt: '2026-10-01T10:00:00.000Z',
-          totalRevenueCents: 4700000,
-          totalExpenseCents: 730000,
-          balanceCents: 3970000,
-        },
-      ];
-    }
+      const totalExpenseCents = monthEntries
+        .filter((e) => e.type === 'expense')
+        .reduce((sum, e) => sum + e.amountCents, 0);
 
-    return months.map((m: any) => ({
-      id: m.id,
-      competence: m.competence,
-      isClosed: Boolean(m.is_closed),
-      closedAt: m.closed_at,
-      closedBy: m.closed_by,
-      totalRevenueCents: Number(m.total_revenue_cents || 0),
-      totalExpenseCents: Number(m.total_expense_cents || 0),
-      balanceCents: Number(m.balance_cents || 0),
-    }));
+      return {
+        id: m.id,
+        competence: m.competence,
+        isClosed: m.isClosed,
+        closedAt: m.closedAt || undefined,
+        closedBy: m.closedBy || undefined,
+        totalRevenueCents,
+        totalExpenseCents,
+        balanceCents: totalRevenueCents - totalExpenseCents,
+      };
+    });
   } catch (err) {
     console.warn('[financeService] Erro ao buscar competências:', err);
     return [];
@@ -153,92 +90,97 @@ export async function fetchMonthDetails(competence: string): Promise<{
   attachments: FinanceAttachment[];
 }> {
   try {
-    // 1. Obter ou criar o mês de competência
-    let { data: month } = await (supabase.from('finance_months' as any) as any)
-      .select('*')
-      .eq('competence', competence)
-      .maybeSingle();
+    const months = readCollection('financeMonths', z.array(StoredFinanceMonthSchema), []);
+    let month = months.find((m) => m.competence === competence);
 
+    // Se o mês ainda não existe no storage, cria um novo mês aberto
     if (!month) {
-      const { data: newMonth } = await (supabase.from('finance_months' as any) as any)
-        .insert({ competence, is_closed: false })
-        .select('*')
-        .single();
+      const newMonth: StoredFinanceMonth = {
+        id: `month-${competence}`,
+        competence,
+        isClosed: false,
+        createdAt: new Date().toISOString(),
+      };
+      writeCollection('financeMonths', [newMonth, ...months]);
       month = newMonth;
     }
 
-    if (!month) {
-      return { month: null, entries: [], projects: [], attachments: [] };
+    const allEntries = readCollection('financeEntries', z.array(StoredFinanceEntrySchema), []);
+    const monthEntries = allEntries.filter(
+      (e) => e.monthId === month!.id || e.competence === month!.competence
+    );
+
+    const allProjects = readCollection('financeProjects', z.array(StoredFinanceProjectSchema), []);
+    const monthProjects = allProjects.filter(
+      (p) => p.monthId === month!.id || p.competence === month!.competence
+    );
+
+    const allAttachments = readCollection('attachments', z.array(StoredAttachmentMetaSchema), []);
+    const monthAttachments = allAttachments.filter((a) => a.monthId === month!.id);
+
+    // Enriquecer anexos com URLs locais
+    const attachmentsWithUrls: FinanceAttachment[] = [];
+    for (const a of monthAttachments) {
+      let signedUrl: string | undefined;
+      try {
+        const fileResult = await getFile(a.storageKey);
+        signedUrl = fileResult?.url;
+      } catch {}
+
+      attachmentsWithUrls.push({
+        id: a.id,
+        entityType: a.projectId ? 'project' : 'entry',
+        entityId: a.projectId || a.id,
+        fileName: a.fileName,
+        sizeBytes: a.sizeBytes,
+        mimeType: a.mimeType,
+        storagePath: a.storageKey,
+        signedUrl,
+        createdAt: a.createdAt,
+      });
     }
 
-    // 2. Buscar lançamentos
-    const { data: entries } = await (supabase.from('finance_entries' as any) as any)
-      .select('*')
-      .eq('month_id', month.id)
-      .order('created_at', { ascending: false });
+    const totalRev = monthEntries
+      .filter((e) => e.type === 'gain')
+      .reduce((sum, e) => sum + e.amountCents, 0);
 
-    // 3. Buscar projetos faturados no mês
-    const { data: projects } = await (supabase.from('finance_month_projects' as any) as any)
-      .select('*')
-      .eq('month_id', month.id)
-      .order('revenue_cents', { ascending: false });
-
-    // 4. Buscar comprovantes anexados
-    const { data: attachments } = await (supabase.from('finance_attachments' as any) as any)
-      .select('*')
-      .eq('month_id', month.id)
-      .order('created_at', { ascending: false });
-
-    const totalRev = (entries || [])
-      .filter((e: any) => e.type === 'gain')
-      .reduce((sum: number, e: any) => sum + Number(e.amount_cents || 0), 0);
-
-    const totalExp = (entries || [])
-      .filter((e: any) => e.type === 'expense')
-      .reduce((sum: number, e: any) => sum + Number(e.amount_cents || 0), 0);
+    const totalExp = monthEntries
+      .filter((e) => e.type === 'expense')
+      .reduce((sum, e) => sum + e.amountCents, 0);
 
     return {
       month: {
         id: month.id,
         competence: month.competence,
-        isClosed: Boolean(month.is_closed),
-        closedAt: month.closed_at,
-        closedBy: month.closed_by,
+        isClosed: month.isClosed,
+        closedAt: month.closedAt || undefined,
+        closedBy: month.closedBy || undefined,
         totalRevenueCents: totalRev,
         totalExpenseCents: totalExp,
         balanceCents: totalRev - totalExp,
       },
-      entries: (entries || []).map((e: any) => ({
+      entries: monthEntries.map((e) => ({
         id: e.id,
-        monthId: e.month_id,
+        monthId: e.monthId,
         type: e.type,
         category: e.category,
-        amountCents: Number(e.amount_cents || 0),
+        amountCents: e.amountCents,
         description: e.description,
-        projectId: e.project_id,
-        projectName: e.project_name,
-        createdAt: e.created_at,
-        createdBy: e.created_by,
+        projectId: e.projectId || undefined,
+        projectName: e.projectName || undefined,
+        createdAt: e.createdAt,
+        createdBy: e.createdBy,
       })),
-      projects: (projects || []).map((p: any) => ({
+      projects: monthProjects.map((p) => ({
         id: p.id,
-        monthId: p.month_id,
-        projectId: p.project_id,
-        projectName: p.project_name,
-        revenueCents: Number(p.revenue_cents || 0),
-        notes: p.notes,
-        createdAt: p.created_at,
+        monthId: p.monthId,
+        projectId: p.id,
+        projectName: p.name,
+        revenueCents: p.revenueCents,
+        notes: p.description,
+        createdAt: p.createdAt,
       })),
-      attachments: (attachments || []).map((a: any) => ({
-        id: a.id,
-        entityType: a.project_id ? 'project' : 'entry',
-        entityId: a.project_id || a.entry_id || month.id,
-        fileName: a.file_name,
-        sizeBytes: Number(a.file_size_bytes || 0),
-        mimeType: a.mime_type,
-        storagePath: a.storage_path,
-        createdAt: a.created_at,
-      })),
+      attachments: attachmentsWithUrls,
     };
   } catch (err) {
     console.error('[financeService] Erro ao carregar detalhes do mês:', err);
@@ -255,49 +197,71 @@ export async function createFinanceEntry(input: {
   category: string;
   amountCents: number;
   description: string;
+  entryDate?: string;
   projectId?: string;
   projectName?: string;
 }): Promise<{ success: boolean; message: string; entry?: FinanceEntry }> {
   try {
-    const { data: session } = await supabase.auth.getSession();
-    const userId = session?.session?.user?.id;
+    const months = readCollection('financeMonths', z.array(StoredFinanceMonthSchema), []);
+    const targetMonth = months.find((m) => m.id === input.monthId);
 
-    const { data, error } = await (supabase.from('finance_entries' as any) as any)
-      .insert({
-        month_id: input.monthId,
-        type: input.type,
-        category: input.category,
-        amount_cents: input.amountCents,
-        description: input.description,
-        project_id: input.projectId || null,
-        project_name: input.projectName || null,
-        created_by: userId || null,
-      })
-      .select('*')
-      .single();
-
-    if (error) {
-      return { success: false, message: error.message };
+    if (targetMonth && targetMonth.isClosed) {
+      return {
+        success: false,
+        message: 'Esta competência está fechada para novos lançamentos. Reabra o mês para editar.',
+      };
     }
+
+    const currentUser = getCurrentUser();
+    const entryId = crypto.randomUUID();
+    const entryDate = input.entryDate || new Date().toISOString().substring(0, 10);
+    const competence = targetMonth ? targetMonth.competence : entryDate.substring(0, 7);
+
+    const newEntry: StoredFinanceEntry = {
+      id: entryId,
+      monthId: input.monthId,
+      competence,
+      type: input.type,
+      category: input.category,
+      amountCents: input.amountCents,
+      description: input.description,
+      entryDate,
+      projectId: input.projectId || null,
+      projectName: input.projectName || null,
+      createdBy: currentUser ? currentUser.id : 'demo-user',
+      createdAt: new Date().toISOString(),
+    };
+
+    mutate({
+      user: currentUser,
+      action: () => {
+        const entries = readCollection('financeEntries', z.array(StoredFinanceEntrySchema), []);
+        writeCollection('financeEntries', [newEntry, ...entries]);
+      },
+      audit: {
+        action: 'FINANCE_ENTRY_CREATE',
+        details: `Lançamento criado: [${input.type === 'gain' ? 'RECEITA' : 'DESPESA'}] ${input.category} - ${formatBRL(input.amountCents)} (${input.description})`,
+      },
+    });
 
     return {
       success: true,
       message: 'Lançamento financeiro registrado com sucesso.',
       entry: {
-        id: data.id,
-        monthId: data.month_id,
-        type: data.type,
-        category: data.category,
-        amountCents: Number(data.amount_cents),
-        description: data.description,
-        projectId: data.project_id,
-        projectName: data.project_name,
-        createdAt: data.created_at,
-        createdBy: data.created_by,
+        id: newEntry.id,
+        monthId: newEntry.monthId,
+        type: newEntry.type,
+        category: newEntry.category,
+        amountCents: newEntry.amountCents,
+        description: newEntry.description,
+        projectId: newEntry.projectId || undefined,
+        projectName: newEntry.projectName || undefined,
+        createdAt: newEntry.createdAt,
+        createdBy: newEntry.createdBy,
       },
     };
   } catch (err: any) {
-    return { success: false, message: err.message || 'Erro ao salvar lançamento.' };
+    return { success: false, message: err?.message || 'Erro ao salvar lançamento.' };
   }
 }
 
@@ -306,17 +270,39 @@ export async function createFinanceEntry(input: {
  */
 export async function deleteFinanceEntry(entryId: string): Promise<{ success: boolean; message: string }> {
   try {
-    const { error } = await (supabase.from('finance_entries' as any) as any)
-      .delete()
-      .eq('id', entryId);
+    const entries = readCollection('financeEntries', z.array(StoredFinanceEntrySchema), []);
+    const target = entries.find((e) => e.id === entryId);
 
-    if (error) {
-      return { success: false, message: error.message };
+    if (!target) {
+      return { success: false, message: 'Lançamento não encontrado.' };
     }
+
+    const months = readCollection('financeMonths', z.array(StoredFinanceMonthSchema), []);
+    const targetMonth = months.find((m) => m.id === target.monthId || m.competence === target.competence);
+
+    if (targetMonth && targetMonth.isClosed) {
+      return {
+        success: false,
+        message: 'Não é possível excluir lançamentos de uma competência fechada.',
+      };
+    }
+
+    const currentUser = getCurrentUser();
+    mutate({
+      user: currentUser,
+      action: () => {
+        const remaining = entries.filter((e) => e.id !== entryId);
+        writeCollection('financeEntries', remaining);
+      },
+      audit: {
+        action: 'FINANCE_ENTRY_DELETE',
+        details: `Lançamento removido: ${target.category} - ${formatBRL(target.amountCents)} (${target.description})`,
+      },
+    });
 
     return { success: true, message: 'Lançamento excluído com sucesso.' };
   } catch (err: any) {
-    return { success: false, message: err.message || 'Erro ao excluir lançamento.' };
+    return { success: false, message: err?.message || 'Erro ao excluir lançamento.' };
   }
 }
 
@@ -330,44 +316,75 @@ export async function createMonthProject(input: {
   notes?: string;
 }): Promise<{ success: boolean; message: string; project?: FinanceMonthProject }> {
   try {
-    const { data, error } = await (supabase.from('finance_month_projects' as any) as any)
-      .insert({
-        month_id: input.monthId,
-        project_name: input.projectName,
-        revenue_cents: input.revenueCents,
-        notes: input.notes || null,
-      })
-      .select('*')
-      .single();
+    const months = readCollection('financeMonths', z.array(StoredFinanceMonthSchema), []);
+    const targetMonth = months.find((m) => m.id === input.monthId);
 
-    if (error) {
-      return { success: false, message: error.message };
+    if (targetMonth && targetMonth.isClosed) {
+      return {
+        success: false,
+        message: 'Esta competência está fechada para novos projetos.',
+      };
     }
 
-    // Também gera o lançamento de receita correspondente
-    await (supabase.from('finance_entries' as any) as any).insert({
-      month_id: input.monthId,
+    const currentUser = getCurrentUser();
+    const projectId = crypto.randomUUID();
+    const competence = targetMonth ? targetMonth.competence : new Date().toISOString().substring(0, 7);
+
+    const newProject: StoredFinanceProject = {
+      id: projectId,
+      monthId: input.monthId,
+      competence,
+      name: input.projectName,
+      revenueCents: input.revenueCents,
+      description: input.notes,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Também cria lançamento de receita correspondente
+    const newEntry: StoredFinanceEntry = {
+      id: crypto.randomUUID(),
+      monthId: input.monthId,
+      competence,
       type: 'gain',
       category: 'Projetos',
-      amount_cents: input.revenueCents,
+      amountCents: input.revenueCents,
       description: `Faturamento: ${input.projectName}`,
-      project_name: input.projectName,
+      entryDate: new Date().toISOString().substring(0, 10),
+      projectId,
+      projectName: input.projectName,
+      createdBy: currentUser ? currentUser.id : 'demo-user',
+      createdAt: new Date().toISOString(),
+    };
+
+    mutate({
+      user: currentUser,
+      action: () => {
+        const projects = readCollection('financeProjects', z.array(StoredFinanceProjectSchema), []);
+        writeCollection('financeProjects', [newProject, ...projects]);
+
+        const entries = readCollection('financeEntries', z.array(StoredFinanceEntrySchema), []);
+        writeCollection('financeEntries', [newEntry, ...entries]);
+      },
+      audit: {
+        action: 'FINANCE_PROJECT_CREATE',
+        details: `Projeto faturado: ${input.projectName} - ${formatBRL(input.revenueCents)}`,
+      },
     });
 
     return {
       success: true,
       message: 'Projeto registrado com sucesso no mês!',
       project: {
-        id: data.id,
-        monthId: data.month_id,
-        projectName: data.project_name,
-        revenueCents: Number(data.revenue_cents),
-        notes: data.notes,
-        createdAt: data.created_at,
+        id: newProject.id,
+        monthId: newProject.monthId,
+        projectName: newProject.name,
+        revenueCents: newProject.revenueCents,
+        notes: newProject.description,
+        createdAt: newProject.createdAt,
       },
     };
   } catch (err: any) {
-    return { success: false, message: err.message || 'Erro ao registrar projeto.' };
+    return { success: false, message: err?.message || 'Erro ao registrar projeto.' };
   }
 }
 
@@ -380,36 +397,32 @@ export async function toggleMonthClosure(
   competence: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const { data: session } = await supabase.auth.getSession();
-    const userId = session?.session?.user?.id;
+    const currentUser = getCurrentUser();
 
-    const payload = isClosed
-      ? {
-          is_closed: true,
-          closed_at: new Date().toISOString(),
-          closed_by: userId || null,
-        }
-      : {
-          is_closed: false,
-          reopened_at: new Date().toISOString(),
-          reopened_by: userId || null,
-        };
-
-    const { error } = await (supabase.from('finance_months' as any) as any)
-      .update(payload)
-      .eq('id', monthId);
-
-    if (error) {
-      return { success: false, message: error.message };
-    }
-
-    // Registrar trilha de auditoria
-    await (supabase.from('audit_logs') as any).insert({
-      action: isClosed ? 'ALTERACAO_STATUS' : 'ALTERACAO_PERFIL',
-      performed_by: userId ? `Colaborador (${userId})` : 'Diretoria Financeira',
-      details: isClosed
-        ? `Competência contábil ${competence} foi FECHADA (somente-leitura).`
-        : `Competência contábil ${competence} foi REABERTA para ajustes.`,
+    mutate({
+      user: currentUser,
+      action: () => {
+        const months = readCollection('financeMonths', z.array(StoredFinanceMonthSchema), []);
+        const updated = months.map((m) => {
+          if (m.id === monthId || m.competence === competence) {
+            return {
+              ...m,
+              isClosed,
+              closedAt: isClosed ? new Date().toISOString() : null,
+              closedBy: isClosed ? (currentUser?.id || null) : null,
+              reopenReason: !isClosed ? 'Reabertura autorizada pela Diretoria Financeira' : null,
+            };
+          }
+          return m;
+        });
+        writeCollection('financeMonths', updated);
+      },
+      audit: {
+        action: isClosed ? 'FINANCE_MONTH_CLOSE' : 'FINANCE_MONTH_REOPEN',
+        details: isClosed
+          ? `Competência contábil ${competence} foi FECHADA (somente-leitura).`
+          : `Competência contábil ${competence} foi REABERTA para ajustes.`,
+      },
     });
 
     return {
@@ -419,12 +432,12 @@ export async function toggleMonthClosure(
         : `Mês ${competence} reaberto com sucesso.`,
     };
   } catch (err: any) {
-    return { success: false, message: err.message || 'Erro ao alterar fechamento do mês.' };
+    return { success: false, message: err?.message || 'Erro ao alterar fechamento do mês.' };
   }
 }
 
 /**
- * Upload de comprovante financeiro no bucket privado finance-files.
+ * Upload de comprovante financeiro no IndexedDB.
  */
 export async function uploadFinanceAttachment(
   file: File,
@@ -440,71 +453,65 @@ export async function uploadFinanceAttachment(
   }
 
   try {
-    const { data: session } = await supabase.auth.getSession();
-    const userId = session?.session?.user?.id;
+    const currentUser = getCurrentUser();
+    const attachmentId = crypto.randomUUID();
+    const storageKey = attachmentId;
 
-    const timestamp = Date.now();
-    const cleanFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const storagePath = `${meta.monthId}/${timestamp}_${cleanFileName}`;
+    // 1. Salva blob no IndexedDB
+    await saveFile(storageKey, file, file.name);
 
-    // 1. Upload no bucket finance-files
-    const { error: uploadErr } = await supabase.storage
-      .from('finance-files')
-      .upload(storagePath, file, {
-        contentType: file.type,
-        upsert: false,
-      });
+    // 2. Registra metadados na coleção
+    const newAttachmentMeta: StoredAttachmentMeta = {
+      id: attachmentId,
+      ticketId: null,
+      commentId: null,
+      projectId: meta.projectId || null,
+      monthId: meta.monthId,
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      sizeBytes: file.size,
+      description: 'Comprovante financeiro',
+      storageKey,
+      uploadedBy: currentUser?.id || 'demo-user',
+      createdAt: new Date().toISOString(),
+    };
 
-    if (uploadErr) {
-      return { success: false, message: `Erro no upload: ${uploadErr.message}` };
-    }
+    mutate({
+      user: currentUser,
+      action: () => {
+        const metas = readCollection('attachments', z.array(StoredAttachmentMetaSchema), []);
+        writeCollection('attachments', [newAttachmentMeta, ...metas]);
+      },
+      audit: {
+        action: 'FINANCE_ATTACHMENT_UPLOAD',
+        details: `Comprovante anexado: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
+      },
+    });
 
-    // 2. Registrar no banco
-    const { data, error: dbErr } = await (supabase.from('finance_attachments' as any) as any)
-      .insert({
-        month_id: meta.monthId,
-        entry_id: meta.entryId || null,
-        project_id: meta.projectId || null,
-        file_name: file.name,
-        file_size_bytes: file.size,
-        mime_type: file.type,
-        storage_path: storagePath,
-        uploaded_by: userId || null,
-      })
-      .select('*')
-      .single();
-
-    if (dbErr) {
-      return { success: false, message: `Erro ao registrar anexo: ${dbErr.message}` };
-    }
-
-    // Obter URL assinada
-    const { data: signedData } = await supabase.storage
-      .from('finance-files')
-      .createSignedUrl(storagePath, 3600);
+    const fileResult = await getFile(storageKey);
 
     return {
       success: true,
       message: 'Comprovante anexado com sucesso!',
       attachment: {
-        id: data.id,
+        id: newAttachmentMeta.id,
         entityType: meta.projectId ? 'project' : 'entry',
         entityId: meta.projectId || meta.entryId || meta.monthId,
         fileName: file.name,
         sizeBytes: file.size,
         mimeType: file.type,
-        storagePath,
-        signedUrl: signedData?.signedUrl,
-        createdAt: data.created_at,
+        storagePath: storageKey,
+        signedUrl: fileResult?.url,
+        createdAt: newAttachmentMeta.createdAt,
       },
     };
   } catch (err: any) {
-    return { success: false, message: err.message || 'Falha no upload do comprovante.' };
+    return { success: false, message: err?.message || 'Falha no upload do comprovante.' };
   }
 }
 
 /**
- * Gera métricas financeiras consolidadas dos últimos 12 meses para os 4 gráficos do Painel Executivo:
+ * Gera métricas financeiras consolidadas a partir dos dados do LocalStorage para os 4 gráficos do Painel Executivo:
  * 1. Barras comparativas de Receita x Despesa
  * 2. Linha de Saldo Acumulado
  * 3. Barras horizontais de Receita por Projeto (top do ano)
@@ -512,28 +519,38 @@ export async function uploadFinanceAttachment(
  */
 export async function fetchExecutiveFinancialChartData() {
   try {
-    // Se temos menos de 6 meses no banco, preencher com histórico realista da empresa júnior
-    const baseMonths = [
-      { month: 'Nov/25', revenue: 32000, expense: 4800, balance: 27200 },
-      { month: 'Dez/25', revenue: 41000, expense: 6200, balance: 34800 },
-      { month: 'Jan/26', revenue: 28000, expense: 5100, balance: 22900 },
-      { month: 'Fev/26', revenue: 35000, expense: 4900, balance: 30100 },
-      { month: 'Mar/26', revenue: 44000, expense: 5800, balance: 38200 },
-      { month: 'Abr/26', revenue: 39000, expense: 5300, balance: 33700 },
-      { month: 'Mai/26', revenue: 46000, expense: 6100, balance: 39900 },
-      { month: 'Jun/26', revenue: 42000, expense: 5500, balance: 36500 },
-      { month: 'Jul/26', revenue: 38000, expense: 4900, balance: 33100 },
-      { month: 'Ago/26', revenue: 45000, expense: 6400, balance: 38600 },
-      { month: 'Set/26', revenue: 47000, expense: 7300, balance: 39700 },
-      { month: 'Out/26', revenue: 42000, expense: 5050, balance: 36950 },
-    ];
+    const months = readCollection('financeMonths', z.array(StoredFinanceMonthSchema), []);
+    const entries = readCollection('financeEntries', z.array(StoredFinanceEntrySchema), []);
+    const projects = readCollection('financeProjects', z.array(StoredFinanceProjectSchema), []);
 
-    // Gráfico 1: Comparativo Receita x Despesa
-    const monthlyComparison = baseMonths;
+    // 1. Comparativo mensal de receita x despesa dos meses cadastrados (ordenados cronologicamente)
+    const sortedMonths = [...months].sort((a, b) => a.competence.localeCompare(b.competence));
 
-    // Gráfico 2: Saldo Acumulado
+    const monthlyComparison = sortedMonths.map((m) => {
+      const monthEntries = entries.filter((e) => e.monthId === m.id || e.competence === m.competence);
+      const rev = monthEntries
+        .filter((e) => e.type === 'gain')
+        .reduce((sum, e) => sum + e.amountCents, 0) / 100;
+      const exp = monthEntries
+        .filter((e) => e.type === 'expense')
+        .reduce((sum, e) => sum + e.amountCents, 0) / 100;
+
+      // Nome amigável para o mês: "2026-10" -> "Out/26"
+      const [year, monthNum] = m.competence.split('-');
+      const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      const monthLabel = `${monthNames[parseInt(monthNum, 10) - 1]}/${year.slice(2)}`;
+
+      return {
+        month: monthLabel,
+        revenue: rev,
+        expense: exp,
+        balance: rev - exp,
+      };
+    });
+
+    // 2. Saldo Acumulado
     let runningBalance = 0;
-    const accumulatedBalance = baseMonths.map((m) => {
+    const accumulatedBalance = monthlyComparison.map((m) => {
       runningBalance += m.balance;
       return {
         month: m.month,
@@ -542,23 +559,33 @@ export async function fetchExecutiveFinancialChartData() {
       };
     });
 
-    // Gráfico 3: Receita por Projeto (Top projetos do ano)
-    const revenueByProject = [
-      { project: 'Plataforma Gamma', revenue: 95000 },
-      { project: 'Projeto E-commerce Alpha', revenue: 84000 },
-      { project: 'Consultoria de Processos Beta', revenue: 62000 },
-      { project: 'App Mobile Delta', revenue: 48000 },
-      { project: 'Portal Corporativo Ômega', revenue: 35000 },
-    ];
+    // 3. Receita por Projeto
+    const projectRevenueMap = new Map<string, number>();
+    for (const p of projects) {
+      const current = projectRevenueMap.get(p.name) || 0;
+      projectRevenueMap.set(p.name, current + p.revenueCents / 100);
+    }
+    const revenueByProject = Array.from(projectRevenueMap.entries())
+      .map(([project, revenue]) => ({ project, revenue }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
 
-    // Gráfico 4: Despesas por Categoria (Donut)
-    const expensesByCategory = [
-      { name: 'Operacional & Nuvem', value: 24500, color: '#3b82f6' },
-      { name: 'Capacitação & Cursos', value: 16800, color: '#10b981' },
-      { name: 'Marketing & Tráfego', value: 12400, color: '#f59e0b' },
-      { name: 'Infraestrutura & Sedes', value: 9800, color: '#6366f1' },
-      { name: 'Benefícios & Confraternização', value: 6500, color: '#ec4899' },
-    ];
+    // 4. Despesas por Categoria
+    const expenseCategoryMap = new Map<string, number>();
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#8b5cf6'];
+    for (const e of entries) {
+      if (e.type === 'expense') {
+        const cat = e.category || 'Outros';
+        const current = expenseCategoryMap.get(cat) || 0;
+        expenseCategoryMap.set(cat, current + e.amountCents / 100);
+      }
+    }
+    let colorIdx = 0;
+    const expensesByCategory = Array.from(expenseCategoryMap.entries()).map(([name, value]) => ({
+      name,
+      value,
+      color: colors[colorIdx++ % colors.length],
+    }));
 
     return {
       monthlyComparison,

@@ -1,14 +1,25 @@
 import { z } from 'zod';
-import { supabase } from './supabase';
-import type { Database } from '../types/database.types';
-import type { Department, Priority, Status, Ticket, TicketEvent, TicketFormData } from '../types/ticket';
+import {
+  readCollection,
+  writeCollection,
+  mutate,
+  generateTicketCode,
+  StoredTicketSchema,
+  StoredCommentSchema,
+  StoredAttachmentMetaSchema,
+  StoredUserSchema,
+  type StoredTicket,
+} from '../data/storage';
+import { seedDemoData } from '../data/seed';
+import { deleteFiles } from '../data/indexedDb';
+import type { AuthorRole, Priority, Status, Ticket, TicketFormData, UserProfile } from '../types/ticket';
 import { computeSlaDueAt } from '../utils/sla';
 
 export const TicketFormSchema = z.object({
   title: z.string().min(3, 'O título deve ter ao menos 3 caracteres.'),
   requester: z.string().min(1, 'O solicitante é obrigatório.'),
   email: z.string().email('E-mail corporativo inválido.'),
-  department: z.enum(['Financeiro', 'RH', 'Marketing', 'Projetos']),
+  department: z.enum(['Administração', 'Financeiro', 'RH', 'Marketing', 'Projetos']),
   assignedDepartment: z.enum(['Financeiro', 'RH', 'Marketing', 'Projetos']),
   category: z.string().min(1, 'A categoria é obrigatória.'),
   priority: z.enum(['Baixa', 'Média', 'Alta', 'Crítica']),
@@ -16,331 +27,363 @@ export const TicketFormSchema = z.object({
   assignee: z.string().optional().default(''),
 });
 
-// Cache auxiliar de departamentos e perfis
-let departmentCache: { id: string; code: Department; name: string }[] | null = null;
-
-async function getDepartments() {
-  if (departmentCache) return departmentCache;
-  const { data } = await supabase.from('departments').select('id, code, name');
-  if (data) {
-    departmentCache = data as { id: string; code: Department; name: string }[];
-  }
-  return departmentCache || [];
+export function mapStoredTicketToTicket(t: StoredTicket): Ticket {
+  return {
+    id: t.id,
+    code: t.code,
+    title: t.title,
+    requester: t.requester,
+    email: t.email,
+    department: t.department,
+    assignedDepartment: t.assignedDepartment,
+    category: t.category,
+    priority: t.priority as Priority,
+    status: t.status as Status,
+    assignee: t.assignee || null,
+    description: t.description,
+    projectId: t.projectId || undefined,
+    csatRating: t.csatRating ?? undefined,
+    slaDueAt: t.slaDueAt,
+    resolvedAt: t.resolvedAt || null,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    history: (t.history || []).map((h) => ({
+      ...h,
+      type: h.type === 'assigned' ? ('assignment' as const) : h.type,
+      role: (['solicitante', 'atendente', 'sistema'].includes(h.role) ? h.role : 'sistema') as AuthorRole,
+    })),
+  };
 }
 
-/** Carrega todos os chamados acessíveis pelo usuário atual de acordo com as regras de RLS */
+/** Carrega todos os chamados da coleção LocalStorage */
 export async function fetchTickets(): Promise<Ticket[]> {
-  const departments = await getDepartments();
-  const depMap = new Map(departments.map((d) => [d.id, d.code]));
-
-  // Buscar chamados
-  const { data: ticketsData, error } = await supabase
-    .from('tickets')
-    .select(`
-      id,
-      title,
-      description,
-      department_id,
-      assigned_department_id,
-      category,
-      priority,
-      status,
-      requester_id,
-      requester_name,
-      requester_email,
-      assignee_id,
-      project_id,
-      csat_rating,
-      sla_due_at,
-      resolved_at,
-      created_at,
-      updated_at
-    `)
-    .order('created_at', { ascending: false });
-
-  if (error || !ticketsData) {
-    console.error('[ticketService] Erro ao buscar chamados:', error);
-    return [];
-  }
-
-  // Buscar nomes de responsáveis se houver
-  const assigneeIds = Array.from(new Set(ticketsData.map((t) => t.assignee_id).filter(Boolean))) as string[];
-  const assigneeMap = new Map<string, string>();
-  if (assigneeIds.length > 0) {
-    const { data: profiles } = await supabase.from('profiles').select('id, name').in('id', assigneeIds);
-    profiles?.forEach((p) => assigneeMap.set(p.id, p.name));
-  }
-
-  // Buscar histórico de auditoria associado aos chamados
-  const ticketIds = ticketsData.map((t) => t.id);
-  const { data: auditData } = await supabase
-    .from('audit_logs')
-    .select('id, ticket_id, action, performed_by, details, created_at')
-    .in('ticket_id', ticketIds)
-    .order('created_at', { ascending: true });
-
-  const historyByTicket = new Map<string, TicketEvent[]>();
-  auditData?.forEach((log) => {
-    if (!log.ticket_id) return;
-    const list = historyByTicket.get(log.ticket_id) || [];
-    list.push({
-      id: log.id,
-      type: log.action === 'CRIACAO' ? 'created' : log.action === 'COMENTARIO' ? 'comment' : 'status',
-      author: log.performed_by.split(' (')[0] || log.performed_by,
-      role: log.performed_by.includes('Sistema') ? 'sistema' : 'atendente',
-      message: log.details,
-      createdAt: log.created_at,
-    });
-    historyByTicket.set(log.ticket_id, list);
-  });
-
-  return ticketsData.map((t) => {
-    const deptCode = (depMap.get(t.department_id) || 'Projetos') as Department;
-    const assignedDeptCode = (t.assigned_department_id ? depMap.get(t.assigned_department_id) : deptCode) as Department;
-    const assigneeName = t.assignee_id ? assigneeMap.get(t.assignee_id) || null : null;
-
-    return {
-      id: t.id,
-      title: t.title,
-      requester: t.requester_name,
-      requesterId: t.requester_id,
-      email: t.requester_email,
-      department: deptCode,
-      assignedDepartment: assignedDeptCode,
-      category: t.category,
-      priority: t.priority as Priority,
-      description: t.description,
-      status: t.status as Status,
-      assignee: assigneeName,
-      assigneeId: t.assignee_id,
-      projectId: (t as any).project_id || null,
-      csatRating: (t as any).csat_rating || null,
-      createdAt: t.created_at,
-      updatedAt: t.updated_at,
-      slaDueAt: t.sla_due_at,
-      resolvedAt: t.resolved_at,
-      history: historyByTicket.get(t.id) || [
-        {
-          id: `ev-${t.id}-init`,
-          type: 'created',
-          author: t.requester_name,
-          role: 'solicitante',
-          message: 'Chamado aberto no sistema.',
-          createdAt: t.created_at,
-        },
-      ],
-    };
-  });
+  seedDemoData();
+  const tickets = readCollection('tickets', z.array(StoredTicketSchema), []);
+  return tickets.map(mapStoredTicketToTicket);
 }
 
-/** Criação de chamado com validação Zod e associação automática com departamento e SLA */
-export async function createTicket(formData: TicketFormData): Promise<{ success: boolean; ticket?: Ticket; error?: string }> {
+/** Criação de chamado com validação Zod, código legível (#0001) e auditoria */
+export async function createTicket(
+  formData: TicketFormData,
+  currentUser?: UserProfile | null
+): Promise<{ success: boolean; ticket?: Ticket; error?: string }> {
   const validation = TicketFormSchema.safeParse(formData);
   if (!validation.success) {
     return { success: false, error: validation.error.issues[0]?.message };
   }
 
   const data = validation.data;
-  const departments = await getDepartments();
-  const dep = departments.find((d) => d.code === data.department);
-  const assignedDep = departments.find((d) => d.code === data.assignedDepartment) || dep;
+  const now = new Date().toISOString();
+  const code = generateTicketCode();
+  const ticketId = crypto.randomUUID();
 
-  if (!dep || !assignedDep) {
-    return { success: false, error: 'Departamento informado inválido.' };
-  }
+  // Buscar diretores do setor de destino para notificar
+  const allUsers = readCollection('users', z.array(StoredUserSchema), []);
+  const directors = allUsers.filter(
+    (u) =>
+      u.isActive &&
+      (u.department === data.assignedDepartment || u.secondaryDepartment === data.assignedDepartment) &&
+      (u.role.toLowerCase().includes('diretor') || u.role.toLowerCase().includes('presidente'))
+  );
 
-  // Buscar ID do responsável se fornecido
-  let assigneeId: string | null = null;
-  if (data.assignee.trim()) {
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('id')
-      .ilike('name', data.assignee.trim())
-      .limit(1)
-      .maybeSingle();
-    assigneeId = prof?.id || null;
-  }
+  const notificationsToSend = directors.map((dir) => ({
+    userId: dir.id,
+    title: `Novo chamado ${code}`,
+    message: `${data.requester} abriu um chamado para o setor ${data.assignedDepartment}: "${data.title}"`,
+    type: 'ticket',
+    link: ticketId,
+  }));
 
-  // Obter usuário autenticado
-  const { data: session } = await supabase.auth.getSession();
-  const userId = session?.session?.user?.id || null;
-
-  const { data: created, error } = await supabase
-    .from('tickets')
-    .insert({
+  try {
+    const newStoredTicket: StoredTicket = {
+      id: ticketId,
+      code,
       title: data.title,
       description: data.description,
-      department_id: dep.id,
-      assigned_department_id: assignedDep.id,
+      department: data.department,
+      assignedDepartment: data.assignedDepartment,
       category: data.category,
       priority: data.priority,
       status: 'Aberto',
-      requester_id: userId,
-      requester_name: data.requester,
-      requester_email: data.email,
-      assignee_id: assigneeId,
-      project_id: formData.projectId || null,
-      sla_due_at: computeSlaDueAt(new Date().toISOString(), data.priority),
-    })
-    .select()
-    .single();
+      requester: data.requester,
+      email: data.email,
+      assignee: data.assignee || null,
+      projectId: formData.projectId || null,
+      csatRating: null,
+      slaDueAt: computeSlaDueAt(now, data.priority),
+      resolvedAt: null,
+      createdAt: now,
+      updatedAt: now,
+      history: [
+        {
+          id: crypto.randomUUID(),
+          type: 'created',
+          author: data.requester,
+          role: 'solicitante',
+          message: 'Chamado aberto no sistema.',
+          createdAt: now,
+        },
+      ],
+    };
 
-  if (error || !created) {
-    return { success: false, error: error?.message || 'Falha ao registrar chamado.' };
-  }
-
-  const newTicket: Ticket = {
-    id: created.id,
-    title: created.title,
-    requester: created.requester_name,
-    email: created.requester_email,
-    department: data.department,
-    assignedDepartment: data.assignedDepartment,
-    category: created.category,
-    priority: created.priority as Priority,
-    description: created.description,
-    status: created.status as Status,
-    assignee: data.assignee.trim() || null,
-    createdAt: created.created_at,
-    updatedAt: created.updated_at,
-    slaDueAt: created.sla_due_at,
-    resolvedAt: created.resolved_at,
-    history: [
-      {
-        id: `ev-${created.id}-create`,
-        type: 'created',
-        author: created.requester_name,
-        role: 'solicitante',
-        message: 'Chamado aberto pelo solicitante.',
-        createdAt: created.created_at,
+    mutate({
+      user: currentUser,
+      action: () => {
+        const tickets = readCollection('tickets', z.array(StoredTicketSchema), []);
+        writeCollection('tickets', [newStoredTicket, ...tickets]);
       },
-    ],
-  };
+      audit: {
+        action: 'CRIACAO_CHAMADO',
+        ticketId,
+        ticketSnapshotTitle: data.title,
+        details: `Chamado ${code} criado para o setor ${data.assignedDepartment} com prioridade ${data.priority}.`,
+      },
+      notify: notificationsToSend,
+    });
 
-  return { success: true, ticket: newTicket };
+    return { success: true, ticket: mapStoredTicketToTicket(newStoredTicket) };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Falha ao salvar chamado.' };
+  }
 }
 
-/**
- * Transição de status atômica via RPC Postgres (validação, SLA, auditoria e notificações)
- */
+/** Transição de status do chamado */
 export async function transitionTicketStatus(
   ticketId: string,
-  newStatus: Status
-): Promise<{ success: boolean; error?: string; status?: string }> {
-  const { data, error } = await supabase.rpc('transition_ticket_status', {
-    p_ticket_id: ticketId,
-    p_new_status: newStatus,
-  });
+  newStatus: Status,
+  reason: string = '',
+  currentUser?: UserProfile | null
+): Promise<{ success: boolean; error?: string; ticket?: Ticket }> {
+  try {
+    let updatedTicket: StoredTicket | null = null;
 
-  if (error) {
-    return { success: false, error: error.message };
+    mutate({
+      user: currentUser,
+      action: () => {
+        const tickets = readCollection('tickets', z.array(StoredTicketSchema), []);
+        const target = tickets.find((t) => t.id === ticketId);
+        if (!target) throw new Error('Chamado não encontrado.');
+
+        const now = new Date().toISOString();
+        const oldStatus = target.status;
+        target.status = newStatus;
+        target.updatedAt = now;
+
+        if (newStatus === 'Resolvido' || newStatus === 'Fechado') {
+          target.resolvedAt = now;
+        } else if (newStatus === 'Aberto' || newStatus === 'Em Andamento') {
+          target.resolvedAt = null;
+        }
+
+        const authorName = currentUser?.name || 'Sistema';
+        const role = currentUser?.role.toLowerCase().includes('solicitante') ? 'solicitante' : 'atendente';
+
+        target.history = [
+          ...(target.history || []),
+          {
+            id: crypto.randomUUID(),
+            type: 'status',
+            author: authorName,
+            role,
+            message: reason ? `Status: ${oldStatus} → ${newStatus}. Motivo: ${reason}` : `Status alterado: ${oldStatus} → ${newStatus}.`,
+            createdAt: now,
+          },
+        ];
+
+        updatedTicket = target;
+        writeCollection('tickets', [...tickets]);
+      },
+      audit: {
+        action: 'ALTERACAO_STATUS',
+        ticketId,
+        details: `Status alterado para "${newStatus}". ${reason ? `Motivo: ${reason}` : ''}`,
+      },
+    });
+
+    return { success: true, ticket: updatedTicket ? mapStoredTicketToTicket(updatedTicket) : undefined };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Falha ao atualizar status.' };
   }
-
-  const res = data as { success: boolean; error?: string; status?: string };
-  if (!res.success) {
-    return { success: false, error: res.error || 'Falha ao transicionar status.' };
-  }
-
-  return { success: true, status: res.status };
 }
 
-/**
- * Atribuição atômica de responsável e departamento via RPC Postgres
- */
-export async function assignTicketAtomic(
+/** Atribuição de responsável ao chamado */
+export async function assignTicket(
   ticketId: string,
-  assigneeId?: string | null,
-  assignedDepartmentId?: string | null
-): Promise<{ success: boolean; error?: string; activeTickets?: number }> {
-  const { data, error } = await supabase.rpc('assign_ticket_atomic', {
-    p_ticket_id: ticketId,
-    p_assignee_id: assigneeId || undefined,
-    p_assigned_department_id: assignedDepartmentId || undefined,
-  });
+  assigneeName: string | null,
+  currentUser?: UserProfile | null
+): Promise<{ success: boolean; error?: string; ticket?: Ticket }> {
+  try {
+    const tickets = readCollection('tickets', z.array(StoredTicketSchema), []);
+    const target = tickets.find((t) => t.id === ticketId);
+    if (!target) throw new Error('Chamado não encontrado.');
 
-  if (error) {
-    return { success: false, error: error.message };
+    let notifyAssigneeId: string | undefined;
+
+    const allUsers = readCollection('users', z.array(StoredUserSchema), []);
+    if (assigneeName) {
+      const found = allUsers.find((u) => u.name.toLowerCase() === assigneeName.toLowerCase());
+      notifyAssigneeId = found?.id;
+    }
+
+    let updatedTicket: StoredTicket = target;
+
+    mutate({
+      user: currentUser,
+      action: () => {
+        const now = new Date().toISOString();
+        target.assignee = assigneeName;
+        target.updatedAt = now;
+
+        target.history = [
+          ...(target.history || []),
+          {
+            id: crypto.randomUUID(),
+            type: 'assigned',
+            author: currentUser?.name || 'Sistema',
+            role: 'atendente',
+            message: assigneeName ? `Chamado atribuído a ${assigneeName}.` : 'Chamado desatribuído.',
+            createdAt: now,
+          },
+        ];
+
+        updatedTicket = target;
+        writeCollection('tickets', [...tickets]);
+      },
+      audit: {
+        action: 'ATRIBUICAO_CHAMADO',
+        ticketId,
+        details: assigneeName ? `Atribuído a ${assigneeName}.` : 'Responsável removido.',
+      },
+      notify: notifyAssigneeId
+        ? [
+            {
+              userId: notifyAssigneeId,
+              title: 'Chamado atribuído a você',
+              message: `Você foi definido como responsável pelo chamado "${target.title}".`,
+              type: 'assignment',
+              link: ticketId,
+            },
+          ]
+        : undefined,
+    });
+
+    return { success: true, ticket: mapStoredTicketToTicket(updatedTicket) };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Falha ao atribuir chamado.' };
   }
-
-  const res = data as { success: boolean; error?: string; assignee_active_tickets?: number };
-  if (!res.success) {
-    return { success: false, error: res.error || 'Falha ao reatribuir chamado.' };
-  }
-
-  return { success: true, activeTickets: res.assignee_active_tickets };
 }
 
-/** Atualização de chamado (status, prioridade, responsável, etc.) */
+/** Atualização genérica de chamado */
 export async function updateTicket(
   ticketId: string,
-  updates: Partial<{
-    title: string;
-    description: string;
-    status: Status;
-    priority: Priority;
-    department: Department;
-    assignedDepartment: Department;
-    assignee: string | null;
-  }>
+  patch: Partial<Ticket>,
+  currentUser?: UserProfile | null
+): Promise<{ success: boolean; error?: string; ticket?: Ticket }> {
+  try {
+    let updatedTicket: StoredTicket | null = null;
+
+    mutate({
+      user: currentUser,
+      action: () => {
+        const tickets = readCollection('tickets', z.array(StoredTicketSchema), []);
+        const target = tickets.find((t) => t.id === ticketId);
+        if (!target) throw new Error('Chamado não encontrado.');
+
+        Object.assign(target, patch, { updatedAt: new Date().toISOString() });
+        updatedTicket = target;
+        writeCollection('tickets', [...tickets]);
+      },
+      audit: {
+        action: 'EDICAO_CHAMADO',
+        ticketId,
+        details: 'Campos do chamado atualizados.',
+      },
+    });
+
+    return { success: true, ticket: updatedTicket ? mapStoredTicketToTicket(updatedTicket) : undefined };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Falha ao editar chamado.' };
+  }
+}
+
+/** Exclusão de chamado com remoção de arquivos e auditoria com snapshot do título */
+export async function deleteTicket(
+  ticketId: string,
+  currentUser?: UserProfile | null
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    let snapshotTitle = '';
+
+    mutate({
+      user: currentUser,
+      permission: 'ticket.delete',
+      permissionContext: {
+        ticket: (() => {
+          const tickets = readCollection('tickets', z.array(StoredTicketSchema), []);
+          const t = tickets.find((item) => item.id === ticketId);
+          return t ? mapStoredTicketToTicket(t) : undefined;
+        })(),
+      },
+      action: () => {
+        const tickets = readCollection('tickets', z.array(StoredTicketSchema), []);
+        const target = tickets.find((t) => t.id === ticketId);
+        if (!target) throw new Error('Chamado não encontrado.');
+        snapshotTitle = target.title;
+
+        // Remover anexos associados do IndexedDB
+        const attachments = readCollection('attachments', z.array(StoredAttachmentMetaSchema), []);
+        const toDeleteFiles = attachments.filter((a) => a.ticketId === ticketId);
+        const fileIds = toDeleteFiles.map((a) => a.storageKey);
+        deleteFiles(fileIds).catch((e) => console.warn('[ticketService] Erro ao excluir arquivos:', e));
+
+        // Limpar comentários e anexos do LocalStorage
+        const remainingAttachments = attachments.filter((a) => a.ticketId !== ticketId);
+        writeCollection('attachments', remainingAttachments);
+
+        const comments = readCollection('comments', z.array(StoredCommentSchema), []);
+        const remainingComments = comments.filter((c) => c.ticketId !== ticketId);
+        writeCollection('comments', remainingComments);
+
+        // Remover chamado
+        const remainingTickets = tickets.filter((t) => t.id !== ticketId);
+        writeCollection('tickets', remainingTickets);
+      },
+      audit: {
+        action: 'EXCLUSAO_CHAMADO',
+        ticketId,
+        ticketSnapshotTitle: snapshotTitle,
+        details: `Chamado "${snapshotTitle}" excluído com sucesso.`,
+      },
+    });
+
+    return { ok: true, message: `Chamado "${snapshotTitle}" excluído com sucesso.` };
+  } catch (err: any) {
+    return { ok: false, message: err.message || 'Falha ao excluir chamado.' };
+  }
+}
+
+/** Reabertura controlada de chamados (Regra dos 7 dias) */
+export async function reopenTicket(
+  ticketId: string,
+  reason: string,
+  currentUser?: UserProfile | null
 ): Promise<{ success: boolean; error?: string }> {
-  // Se for apenas alteração de status, utiliza a RPC atômica
-  if (
-    updates.status !== undefined &&
-    updates.title === undefined &&
-    updates.description === undefined &&
-    updates.priority === undefined &&
-    updates.department === undefined &&
-    updates.assignedDepartment === undefined &&
-    updates.assignee === undefined
-  ) {
-    return transitionTicketStatus(ticketId, updates.status);
+  const tickets = readCollection('tickets', z.array(StoredTicketSchema), []);
+  const target = tickets.find((t) => t.id === ticketId);
+  if (!target) return { success: false, error: 'Chamado não encontrado.' };
+
+  if (target.status !== 'Resolvido') {
+    return { success: false, error: 'Apenas chamados no status "Resolvido" podem ser reabertos.' };
   }
 
-  const departments = await getDepartments();
-  const payload: Database['public']['Tables']['tickets']['Update'] = {};
-
-  if (updates.title !== undefined) payload.title = updates.title;
-  if (updates.description !== undefined) payload.description = updates.description;
-  if (updates.status !== undefined) payload.status = updates.status;
-  if (updates.priority !== undefined) payload.priority = updates.priority;
-
-  if (updates.department) {
-    const dep = departments.find((d) => d.code === updates.department);
-    if (dep) payload.department_id = dep.id;
-  }
-  if (updates.assignedDepartment) {
-    const dep = departments.find((d) => d.code === updates.assignedDepartment);
-    if (dep) payload.assigned_department_id = dep.id;
-  }
-
-  if (updates.assignee !== undefined) {
-    if (!updates.assignee) {
-      payload.assignee_id = null;
-    } else {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('id')
-        .ilike('name', updates.assignee)
-        .limit(1)
-        .maybeSingle();
-      if (prof) payload.assignee_id = prof.id;
+  if (target.resolvedAt) {
+    const resolvedTime = new Date(target.resolvedAt).getTime();
+    const diffDays = (Date.now() - resolvedTime) / (1000 * 3600 * 24);
+    if (diffDays > 7) {
+      return { success: false, error: 'O prazo de 7 dias para reabertura deste chamado expirou.' };
     }
   }
 
-  const { error } = await supabase.from('tickets').update(payload).eq('id', ticketId);
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-  return { success: true };
+  const res = await transitionTicketStatus(ticketId, 'Em Andamento', `Reaberto pelo usuário: ${reason}`, currentUser);
+  return { success: res.success, error: res.error };
 }
-
-/** Exclusão de chamado (protegido por RLS com a permissão ticket.delete) */
-export async function deleteTicket(ticketId: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('tickets').delete().eq('id', ticketId);
-  if (error) {
-    return { success: false, error: error.message };
-  }
-  return { success: true };
-}
-

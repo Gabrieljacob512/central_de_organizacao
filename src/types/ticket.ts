@@ -59,6 +59,8 @@ export interface UserProfile {
   isActive?: boolean;
   mustChangePassword?: boolean;
   avatarUrl?: string | null;
+  phone?: string;
+  startDate?: string;
   theme?: 'light' | 'dark' | 'system';
   permissions?: string[];
   isExecutive?: boolean;
@@ -91,7 +93,15 @@ export interface AuditLog {
 }
 
 /** Tipo de evento registrado no histórico do chamado. */
-export type EventType = 'created' | 'comment' | 'status' | 'assignment' | 'update';
+export type EventType =
+  | 'created'
+  | 'comment'
+  | 'status'
+  | 'assignment'
+  | 'assigned'
+  | 'update'
+  | 'attachment'
+  | 'reopened';
 
 /** Papel de quem gerou o evento. */
 export type AuthorRole = 'solicitante' | 'atendente' | 'sistema';
@@ -121,8 +131,9 @@ export interface TicketEvent {
 }
 
 export interface Ticket {
-  /** Identificador legível, ex.: TS-1001 */
+  /** Identificador legível, ex.: TS-1001 ou #0001 */
   id: string;
+  code?: string;
   title: string;
   requester: string;
   requesterId?: string | null;

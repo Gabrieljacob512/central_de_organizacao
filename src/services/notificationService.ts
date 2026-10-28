@@ -1,105 +1,150 @@
-import { supabase } from './supabase';
-import type { Database } from '../types/database.types';
+import { z } from 'zod';
+import {
+  mutate,
+  readCollection,
+  StoredNotificationSchema,
+  StoredSettingsSchema,
+  subscribeStorage,
+  writeCollection,
+} from '../data/storage';
+import { getCurrentUser } from './authService';
 
-export type NotificationRecord = Database['public']['Tables']['notifications']['Row'];
-export type NotificationPreferences = Database['public']['Tables']['notification_preferences']['Row'];
+export interface NotificationRecord {
+  id: string;
+  user_id: string;
+  userId?: string;
+  title: string;
+  message: string;
+  type: string;
+  link?: string | null;
+  read: boolean;
+  sender_id?: string | null;
+  created_at: string;
+  createdAt?: string;
+}
+
+export interface NotificationPreferences {
+  id?: string;
+  user_id?: string;
+  email_enabled: boolean;
+  in_app_enabled: boolean;
+  notify_ticket_assigned: boolean;
+  notify_new_comment: boolean;
+  notify_mention: boolean;
+  notify_status_change: boolean;
+  notify_sla_warning: boolean;
+  notify_sla_breached: boolean;
+  updated_at?: string;
+}
+
+const DEFAULT_PREFERENCES: NotificationPreferences = {
+  email_enabled: true,
+  in_app_enabled: true,
+  notify_ticket_assigned: true,
+  notify_new_comment: true,
+  notify_mention: true,
+  notify_status_change: true,
+  notify_sla_warning: true,
+  notify_sla_breached: true,
+};
 
 /**
  * Busca todas as notificações do usuário logado
  */
 export async function fetchUserNotifications(): Promise<NotificationRecord[]> {
-  const { data: session } = await supabase.auth.getSession();
-  const userId = session?.session?.user?.id;
-  if (!userId) return [];
+  const currentUser = getCurrentUser();
+  if (!currentUser) return [];
 
-  const { data, error } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(50);
+  try {
+    const notifications = readCollection('notifications', z.array(StoredNotificationSchema), []);
+    const userNotifications = notifications
+      .filter((n) => n.userId === currentUser.id)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  if (error) {
-    console.error('[notificationService] Erro ao buscar notificações:', error);
+    return userNotifications.map((n) => ({
+      id: n.id,
+      user_id: n.userId,
+      userId: n.userId,
+      title: n.title,
+      message: n.message,
+      type: n.type,
+      link: n.link || null,
+      read: n.read,
+      sender_id: n.senderId || null,
+      created_at: n.createdAt,
+      createdAt: n.createdAt,
+    }));
+  } catch (err) {
+    console.error('[notificationService] Erro ao buscar notificações:', err);
     return [];
   }
-
-  return data || [];
 }
 
 /**
  * Marca uma notificação individual como lida
  */
 export async function markNotificationAsRead(notificationId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ read: true })
-    .eq('id', notificationId);
+  const currentUser = getCurrentUser();
+  if (!currentUser) return false;
 
-  return !error;
+  try {
+    mutate({
+      user: currentUser,
+      action: () => {
+        const notifications = readCollection('notifications', z.array(StoredNotificationSchema), []);
+        const updated = notifications.map((n) => (n.id === notificationId ? { ...n, read: true } : n));
+        writeCollection('notifications', updated);
+      },
+    });
+    return true;
+  } catch (err) {
+    console.error('[notificationService] Erro ao marcar notificação:', err);
+    return false;
+  }
 }
 
 /**
  * Marca todas as notificações do usuário como lidas
  */
 export async function markAllNotificationsAsRead(): Promise<boolean> {
-  const { data: session } = await supabase.auth.getSession();
-  const userId = session?.session?.user?.id;
-  if (!userId) return false;
+  const currentUser = getCurrentUser();
+  if (!currentUser) return false;
 
-  const { error } = await supabase
-    .from('notifications')
-    .update({ read: true })
-    .eq('user_id', userId)
-    .eq('read', false);
-
-  return !error;
+  try {
+    mutate({
+      user: currentUser,
+      action: () => {
+        const notifications = readCollection('notifications', z.array(StoredNotificationSchema), []);
+        const updated = notifications.map((n) =>
+          n.userId === currentUser.id ? { ...n, read: true } : n
+        );
+        writeCollection('notifications', updated);
+      },
+    });
+    return true;
+  } catch (err) {
+    console.error('[notificationService] Erro ao marcar todas notificações:', err);
+    return false;
+  }
 }
 
 /**
- * Obtém as preferências de notificação do usuário (cria se ainda não existir)
+ * Obtém as preferências de notificação do usuário
  */
 export async function fetchNotificationPreferences(): Promise<NotificationPreferences | null> {
-  const { data: session } = await supabase.auth.getSession();
-  const userId = session?.session?.user?.id;
-  if (!userId) return null;
+  const currentUser = getCurrentUser();
+  if (!currentUser) return null;
 
-  const { data, error } = await supabase
-    .from('notification_preferences')
-    .select('*')
-    .eq('user_id', userId)
-    .maybeSingle();
+  try {
+    const settings = readCollection('settings', StoredSettingsSchema, {});
+    const key = `notif_prefs_${currentUser.id}`;
+    const saved = settings[key] as NotificationPreferences | undefined;
 
-  if (error) {
-    console.error('[notificationService] Erro ao buscar preferências:', error);
+    return saved || { ...DEFAULT_PREFERENCES, user_id: currentUser.id };
+  } catch (err) {
+    console.error('[notificationService] Erro ao buscar preferências:', err);
     return null;
   }
-
-  if (data) return data;
-
-  // Criar preferências padrão caso ainda não existam
-  const { data: created, error: createError } = await supabase
-    .from('notification_preferences')
-    .insert({
-      user_id: userId,
-      email_enabled: true,
-      in_app_enabled: true,
-      notify_ticket_assigned: true,
-      notify_new_comment: true,
-      notify_mention: true,
-      notify_status_change: true,
-      notify_sla_warning: true,
-      notify_sla_breached: true,
-    })
-    .select('*')
-    .single();
-
-  if (createError) {
-    console.error('[notificationService] Erro ao criar preferências padrão:', createError);
-    return null;
-  }
-
-  return created;
 }
 
 /**
@@ -108,43 +153,40 @@ export async function fetchNotificationPreferences(): Promise<NotificationPrefer
 export async function updateNotificationPreferences(
   prefs: Partial<Omit<NotificationPreferences, 'id' | 'user_id' | 'updated_at'>>
 ): Promise<boolean> {
-  const { data: session } = await supabase.auth.getSession();
-  const userId = session?.session?.user?.id;
-  if (!userId) return false;
+  const currentUser = getCurrentUser();
+  if (!currentUser) return false;
 
-  const { error } = await supabase
-    .from('notification_preferences')
-    .upsert({
-      user_id: userId,
+  try {
+    const settings = readCollection('settings', StoredSettingsSchema, {});
+    const key = `notif_prefs_${currentUser.id}`;
+    const current = (settings[key] as NotificationPreferences | undefined) || DEFAULT_PREFERENCES;
+
+    const updated = {
+      ...current,
       ...prefs,
+      user_id: currentUser.id,
       updated_at: new Date().toISOString(),
+    };
+
+    writeCollection('settings', {
+      ...settings,
+      [key]: updated,
     });
 
-  return !error;
+    return true;
+  } catch (err) {
+    console.error('[notificationService] Erro ao salvar preferências:', err);
+    return false;
+  }
 }
 
 /**
- * Assina canal em tempo real para receber notificações instantâneas
+ * Assina atualizações em tempo real para o usuário
  */
-export function subscribeToUserNotifications(userId: string, onUpdate: () => void) {
-  const channelName = `notifications-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const channel = supabase
-    .channel(channelName)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'notifications',
-        filter: `user_id=eq.${userId}`,
-      },
-      () => {
-        onUpdate();
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+export function subscribeToUserNotifications(_userId: string, onUpdate: () => void) {
+  return subscribeStorage((key) => {
+    if (!key || key === 'notifications') {
+      onUpdate();
+    }
+  });
 }

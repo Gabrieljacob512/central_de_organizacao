@@ -1,6 +1,19 @@
-import { supabase } from './supabase';
+import { z } from 'zod';
+import {
+  mutate,
+  readCollection,
+  StoredCommentSchema,
+  StoredDepartmentSchema,
+  StoredMembershipSchema,
+  StoredNotificationSchema,
+  StoredTicketSchema,
+  StoredUserSchema,
+  writeCollection,
+  type StoredMembership,
+  type StoredUser,
+} from '../data/storage';
 import type { Department, ResponderStat, UserProfile } from '../types/ticket';
-import { INITIAL_USERS } from '../constants/config';
+import { getCurrentUser } from './authService';
 
 export interface CreatePersonInput {
   name: string;
@@ -21,95 +34,106 @@ export interface UpdatePersonInput {
 }
 
 /**
+ * Gera uma senha temporária segura de 10 caracteres alfanuméricos com símbolos.
+ */
+export function generateTemporaryPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$';
+  let password = '';
+  const array = new Uint32Array(10);
+  crypto.getRandomValues(array);
+  for (let i = 0; i < 10; i++) {
+    password += chars[array[i] % chars.length];
+  }
+  return password;
+}
+
+/**
  * Busca a lista completa de colaboradores e seus papéis / associações.
  */
 export async function fetchPeopleList(): Promise<UserProfile[]> {
   try {
-    const { data, error } = await (supabase.from('profiles') as any)
-      .select(`
-        id,
-        name,
-        email,
-        is_active,
-        must_change_password,
-        avatar_url,
-        departments:department_id (id, code, name),
-        roles:role_id (id, name),
-        department_memberships (
-          department_id,
-          is_director,
-          departments:department_id (id, code, name)
-        )
-      `)
-      .order('name');
+    const users = readCollection('users', z.array(StoredUserSchema), []);
+    const memberships = readCollection('memberships', z.array(StoredMembershipSchema), []);
+    const departments = readCollection('departments', z.array(StoredDepartmentSchema), []);
 
-    if (error || !data || data.length === 0) {
-      console.warn('[peopleService] Usando lista inicial local:', error?.message);
-      return INITIAL_USERS;
-    }
-
-    return data.map((item: any) => {
-      const deptCode = (item.departments?.code || item.departments?.name || 'Administração') as Department;
-      const roleName = item.roles?.name || 'Membro';
-
-      const memberships = (item.department_memberships || []).map((m: any) => ({
-        departmentId: m.department_id,
-        departmentCode: (m.departments?.code || m.departments?.name) as Department,
-        departmentName: m.departments?.name || '',
-        isDirector: Boolean(m.is_director),
-      }));
-
-      // Achar departamento secundário onde é diretor
-      const secDirector = memberships.find((m: any) => m.isDirector && m.departmentCode !== 'Administração');
+    return users.map((u) => {
+      const userMemberships = memberships.filter((m) => m.userId === u.id);
+      const isExec = u.role === 'Presidente' || u.role === 'Vice-presidente';
 
       return {
-        id: item.id,
-        name: item.name,
-        email: item.email,
-        department: deptCode,
-        secondaryDepartment: secDirector?.departmentCode,
-        role: roleName,
-        isActive: item.is_active ?? true,
-        mustChangePassword: item.must_change_password ?? false,
-        avatarUrl: item.avatar_url,
-        createdAt: new Date().toISOString(),
-        isExecutive: roleName === 'Presidente' || roleName === 'Vice-presidente',
-        departmentMemberships: memberships,
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        department: u.department,
+        secondaryDepartment: u.secondaryDepartment,
+        role: u.role,
+        isActive: u.isActive,
+        mustChangePassword: u.mustChangePassword,
+        avatarUrl: u.avatarUrl,
+        createdAt: u.createdAt,
+        isExecutive: isExec,
+        departmentMemberships: userMemberships.map((m) => {
+          const dept = departments.find((d) => d.id === m.departmentId || d.code === m.departmentCode);
+          return {
+            departmentId: m.departmentId,
+            departmentCode: m.departmentCode,
+            departmentName: dept?.name || m.departmentCode,
+            isDirector: m.isDirector,
+          };
+        }),
       };
     });
   } catch (err) {
     console.warn('[peopleService] Erro ao buscar colaboradores:', err);
-    return INITIAL_USERS;
+    return [];
   }
 }
 
 /**
- * Consulta estatísticas agregadas de resposta a chamados via RPC segura hr_responders_stats.
+ * Consulta estatísticas agregadas de resposta a chamados a partir dos dados do storage.
  */
 export async function fetchRespondersStats(periodDays: number = 30): Promise<ResponderStat[]> {
   try {
-    const { data, error } = await (supabase.rpc as any)('hr_responders_stats', {
-      period_days: periodDays,
+    const users = readCollection('users', z.array(StoredUserSchema), []);
+    const tickets = readCollection('tickets', z.array(StoredTicketSchema), []);
+    const comments = readCollection('comments', z.array(StoredCommentSchema), []);
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - periodDays);
+
+    return users.map((u) => {
+      const userTickets = tickets.filter(
+        (t) => t.assignee === u.name || t.email.toLowerCase() === u.email.toLowerCase()
+      );
+      const userComments = comments.filter((c) => c.authorId === u.id);
+
+      const assignedCount = userTickets.filter((t) => t.assignee === u.name).length;
+      const resolvedCount = userTickets.filter(
+        (t) => t.assignee === u.name && (t.status === 'Resolvido' || t.status === 'Fechado')
+      ).length;
+
+      // Calcular última atividade
+      const dates = [
+        ...userComments.map((c) => new Date(c.createdAt).getTime()),
+        ...userTickets.map((t) => new Date(t.updatedAt).getTime()),
+      ].filter((d) => !isNaN(d));
+
+      const lastActivityAt = dates.length > 0 ? new Date(Math.max(...dates)).toISOString() : null;
+
+      return {
+        profile_id: u.id,
+        name: u.name,
+        email: u.email,
+        department_name: u.department,
+        role_name: u.role,
+        assigned_count: assignedCount,
+        comments_count: userComments.length,
+        resolved_count: resolvedCount,
+        last_activity_at: lastActivityAt,
+      };
     });
-
-    if (error) {
-      console.error('[peopleService] Erro ao executar hr_responders_stats:', error.message);
-      return [];
-    }
-
-    return (data || []).map((row: any) => ({
-      profile_id: row.profile_id,
-      name: row.name,
-      email: row.email,
-      department_name: row.department_name,
-      role_name: row.role_name,
-      assigned_count: Number(row.assigned_count || 0),
-      comments_count: row.comments_count !== null ? Number(row.comments_count) : 0,
-      resolved_count: row.resolved_count !== null ? Number(row.resolved_count) : 0,
-      last_activity_at: row.last_activity_at,
-    }));
   } catch (err) {
-    console.error('[peopleService] Erro na requisição de estatísticas:', err);
+    console.error('[peopleService] Erro ao carregar estatísticas:', err);
     return [];
   }
 }
@@ -122,115 +146,175 @@ export async function togglePersonStatus(
   isActive: boolean
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const { error } = await (supabase.from('profiles') as any)
-      .update({ is_active: isActive, updated_at: new Date().toISOString() })
-      .eq('id', userId);
+    const currentUser = getCurrentUser();
+    const users = readCollection('users', z.array(StoredUserSchema), []);
+    const target = users.find((u) => u.id === userId);
 
-    if (error) {
-      return { success: false, message: error.message };
+    if (!target) {
+      return { success: false, message: 'Colaborador não encontrado.' };
     }
+
+    if (target.email === 'presidente@gmail.com') {
+      return { success: false, message: 'A conta raiz do Presidente não pode ser inativada.' };
+    }
+
+    mutate({
+      user: currentUser,
+      action: () => {
+        const updated = users.map((u) => (u.id === userId ? { ...u, isActive } : u));
+        writeCollection('users', updated);
+      },
+      audit: {
+        action: isActive ? 'USER_ACTIVATE' : 'USER_DEACTIVATE',
+        details: `Colaborador ${target.name} (${target.email}) foi ${isActive ? 'ativado' : 'inativado'}.`,
+      },
+    });
 
     return {
       success: true,
       message: isActive ? 'Colaborador ativado com sucesso.' : 'Colaborador inativado com sucesso.',
     };
   } catch (err: any) {
-    return { success: false, message: err.message || 'Erro inesperado ao alterar status.' };
+    return { success: false, message: err?.message || 'Erro inesperado ao alterar status.' };
   }
 }
 
 /**
- * Criação de novo colaborador com papéis condicionados e regras executivas.
+ * Criação de novo colaborador com papéis condicionados, validação de permissões e senha temporária de 10 caracteres.
  */
 export async function createPerson(
   input: CreatePersonInput
-): Promise<{ success: boolean; message: string; user?: UserProfile }> {
+): Promise<{ success: boolean; message: string; user?: UserProfile; temporaryPassword?: string }> {
   try {
-    // 1. Obter IDs de departamento e cargo
-    const { data: depts } = await (supabase.from('departments') as any).select('id, code, name');
-    const { data: roles } = await (supabase.from('roles') as any).select('id, name');
+    const cleanName = input.name.trim();
+    const cleanEmail = input.email.trim().toLowerCase();
 
-    const dep = depts?.find((d: any) => d.code === input.department || d.name === input.department);
-    const role = roles?.find((r: any) => r.name.toLowerCase() === input.role.toLowerCase());
-
-    if (!dep || !role) {
-      return { success: false, message: 'Departamento ou cargo inválido.' };
+    if (!cleanName || !cleanEmail) {
+      return { success: false, message: 'Por favor, preencha todos os campos obrigatórios.' };
     }
 
-    // Gerar senha padrão segura caso não fornecida
-    const rawPassword = input.password || 'Tecno@2026!';
+    const users = readCollection('users', z.array(StoredUserSchema), []);
+    if (users.some((u) => u.email.toLowerCase() === cleanEmail)) {
+      return { success: false, message: 'Este e-mail já está cadastrado para outro colaborador.' };
+    }
 
-    // 2. Criar no Supabase Auth se serviço estiver configurado
-    const { data: created } = await supabase.auth.signUp({
-      email: input.email,
-      password: rawPassword,
-      options: {
-        data: { name: input.name },
+    const currentUser = getCurrentUser();
+
+    // Validação estrita de permissões conforme cargo de quem está logado:
+    // - Presidente: pode cadastrar qualquer cargo em qualquer departamento.
+    // - Vice-presidente: pode cadastrar diretores/membros apenas no departamento operacional que dirige.
+    // - Diretor de RH: pode cadastrar membros apenas no RH.
+    if (currentUser) {
+      if (currentUser.role === 'Presidente') {
+        // Permitido tudo
+      } else if (currentUser.role === 'Vice-presidente') {
+        const allowedDept = currentUser.secondaryDepartment || 'Projetos';
+        if (input.department !== allowedDept) {
+          return {
+            success: false,
+            message: `Acesso negado. Como Vice-presidente, você só pode cadastrar no departamento ${allowedDept}.`,
+          };
+        }
+        if (input.role === 'Presidente' || input.role === 'Vice-presidente') {
+          return {
+            success: false,
+            message: 'Acesso negado. Apenas o Presidente pode criar novos cargos executivos.',
+          };
+        }
+      } else if (currentUser.role === 'Diretor' && currentUser.department === 'RH') {
+        if (input.department !== 'RH' || input.role !== 'Membro') {
+          return {
+            success: false,
+            message: 'Acesso negado. O Diretor de RH só pode cadastrar membros no departamento de RH.',
+          };
+        }
+      } else {
+        return {
+          success: false,
+          message: 'Acesso negado. Você não possui permissão para cadastrar novos colaboradores.',
+        };
+      }
+    }
+
+    const newId = `user-${crypto.randomUUID().slice(0, 8)}`;
+    const tempPassword = input.password || generateTemporaryPassword();
+    const now = new Date().toISOString();
+
+    const newUser: StoredUser = {
+      id: newId,
+      name: cleanName,
+      email: cleanEmail,
+      password: tempPassword,
+      department: input.department,
+      secondaryDepartment: input.secondaryDepartment,
+      departmentEmail: `${input.department.toLowerCase()}@tecnosystem.com`,
+      role: input.role,
+      isActive: true,
+      mustChangePassword: true,
+      createdAt: now,
+    };
+
+    // Obter ou mapear departamento
+    const departments = readCollection('departments', z.array(StoredDepartmentSchema), []);
+    const deptRecord = departments.find((d) => d.code === input.department);
+    const deptId = deptRecord?.id || `dept-${input.department.toLowerCase()}`;
+
+    const isDirector = input.role.includes('Diretor') || input.role === 'Presidente';
+    const newMemberships: StoredMembership[] = [
+      {
+        userId: newId,
+        departmentId: deptId,
+        departmentCode: input.department,
+        isDirector,
+      },
+    ];
+
+    if (input.role === 'Vice-presidente' && input.secondaryDepartment) {
+      const secDeptRecord = departments.find((d) => d.code === input.secondaryDepartment);
+      const secDeptId = secDeptRecord?.id || `dept-${input.secondaryDepartment.toLowerCase()}`;
+      newMemberships.push({
+        userId: newId,
+        departmentId: secDeptId,
+        departmentCode: input.secondaryDepartment,
+        isDirector: true,
+      });
+    }
+
+    mutate({
+      user: currentUser,
+      action: () => {
+        const currentUsers = readCollection('users', z.array(StoredUserSchema), []);
+        writeCollection('users', [newUser, ...currentUsers]);
+
+        const currentMemberships = readCollection('memberships', z.array(StoredMembershipSchema), []);
+        writeCollection('memberships', [...newMemberships, ...currentMemberships]);
+      },
+      audit: {
+        action: 'USER_CREATE',
+        details: `Novo colaborador cadastrado: ${cleanName} (${input.role} em ${input.department})`,
       },
     });
 
-    const newId = created.user?.id || `usr-${Date.now()}`;
-
-    // 3. Upsert no perfil
-    const { error: profErr } = await (supabase.from('profiles') as any).upsert({
+    const createdProfile: UserProfile = {
       id: newId,
-      name: input.name,
-      email: input.email,
-      department_id: dep.id,
-      role_id: role.id,
-      is_active: true,
-      must_change_password: true,
-      updated_at: new Date().toISOString(),
-    });
-
-    if (profErr) {
-      return { success: false, message: profErr.message };
-    }
-
-    // 4. Se for Vice-presidente, associar ao depto de Administração E depto operacional onde é diretor
-    if (input.role.toLowerCase().includes('vice') && input.secondaryDepartment) {
-      const secDep = depts?.find(
-        (d: any) => d.code === input.secondaryDepartment || d.name === input.secondaryDepartment
-      );
-      if (secDep) {
-        await (supabase.from('department_memberships' as any) as any).upsert([
-          {
-            user_id: newId,
-            department_id: dep.id,
-            is_director: false,
-          },
-          {
-            user_id: newId,
-            department_id: secDep.id,
-            is_director: true,
-          },
-        ]);
-      }
-    } else {
-      const isDirector = input.role.toLowerCase().includes('diretor') || input.role.toLowerCase().includes('presidente');
-      await (supabase.from('department_memberships' as any) as any).upsert({
-        user_id: newId,
-        department_id: dep.id,
-        is_director: isDirector,
-      });
-    }
+      name: cleanName,
+      email: cleanEmail,
+      department: input.department,
+      secondaryDepartment: input.secondaryDepartment,
+      role: input.role,
+      isActive: true,
+      mustChangePassword: true,
+      createdAt: now,
+    };
 
     return {
       success: true,
       message: 'Colaborador cadastrado com sucesso!',
-      user: {
-        id: newId,
-        name: input.name,
-        email: input.email,
-        department: input.department,
-        secondaryDepartment: input.secondaryDepartment,
-        role: input.role,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      },
+      user: createdProfile,
+      temporaryPassword: tempPassword,
     };
   } catch (err: any) {
-    return { success: false, message: err.message || 'Falha ao registrar colaborador.' };
+    return { success: false, message: err?.message || 'Falha ao registrar colaborador.' };
   }
 }
 
@@ -242,24 +326,32 @@ export async function sendActivityAlert(
   targetName: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const { data: session } = await supabase.auth.getSession();
-    const senderId = session?.session?.user?.id;
+    const currentUser = getCurrentUser();
 
-    const { error } = await (supabase.from('notifications') as any).insert({
-      user_id: targetUserId,
-      sender_id: senderId,
-      title: 'Lembrete de Atendimento e Chamados',
-      message: `Olá, ${targetName}! O RH identificou que você não possui respostas registradas a chamados no período recente. Por favor, verifique a fila do seu departamento.`,
-      type: 'warning',
-      read: false,
+    mutate({
+      user: currentUser,
+      action: () => {
+        const notifications = readCollection('notifications', z.array(StoredNotificationSchema), []);
+        const newNotif = {
+          id: crypto.randomUUID(),
+          userId: targetUserId,
+          title: 'Lembrete de Atendimento e Chamados',
+          message: `Olá, ${targetName}! O RH identificou que você não possui respostas registradas a chamados no período recente. Por favor, verifique a fila do seu departamento.`,
+          type: 'warning',
+          read: false,
+          senderId: currentUser?.id,
+          createdAt: new Date().toISOString(),
+        };
+        writeCollection('notifications', [newNotif, ...notifications]);
+      },
+      audit: {
+        action: 'NOTIFICATION_SEND',
+        details: `Alerta de atividade enviado para ${targetName}`,
+      },
     });
-
-    if (error) {
-      return { success: false, message: error.message };
-    }
 
     return { success: true, message: `Alerta enviado com sucesso para ${targetName}.` };
   } catch (err: any) {
-    return { success: false, message: err.message || 'Erro ao enviar alerta.' };
+    return { success: false, message: err?.message || 'Erro ao enviar alerta.' };
   }
 }

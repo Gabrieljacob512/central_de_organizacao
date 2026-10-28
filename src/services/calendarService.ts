@@ -1,6 +1,13 @@
 import { z } from 'zod';
-import { supabase } from './supabase';
+import {
+  mutate,
+  readCollection,
+  StoredEventSchema,
+  writeCollection,
+  type StoredEvent,
+} from '../data/storage';
 import type { CalendarEvent, EventCategory, EventScope } from '../types/calendar';
+import { getCurrentUser } from './authService';
 
 export const CalendarEventSchema = z.object({
   title: z.string().min(2, 'O título deve ter no mínimo 2 caracteres.'),
@@ -12,29 +19,31 @@ export const CalendarEventSchema = z.object({
 });
 
 export async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
-  const { data, error } = await supabase
-    .from('calendar_events')
-    .select('*')
-    .order('date', { ascending: true });
+  try {
+    const events = readCollection('events', z.array(StoredEventSchema), []);
 
-  if (error || !data) {
-    console.error('[calendarService] Erro ao buscar eventos:', error);
+    return events.map((e) => {
+      const datePart = e.startDate.substring(0, 10);
+      const timePart = e.startDate.length > 10 ? e.startDate.substring(11, 16) : undefined;
+
+      return {
+        id: e.id,
+        title: e.title,
+        description: e.description,
+        date: datePart,
+        time: timePart,
+        scope: (e.isGlobal ? 'global' : 'private') as EventScope,
+        category: 'reuniao' as EventCategory,
+        createdById: e.createdBy,
+        createdByName: 'Colaborador',
+        createdByEmail: '',
+        createdAt: e.createdAt,
+      };
+    });
+  } catch (err) {
+    console.error('[calendarService] Erro ao buscar eventos:', err);
     return [];
   }
-
-  return data.map((e) => ({
-    id: e.id,
-    title: e.title,
-    description: e.description || undefined,
-    date: e.date,
-    time: e.time || undefined,
-    scope: e.scope as EventScope,
-    category: e.category as EventCategory,
-    createdById: e.created_by_id,
-    createdByName: e.created_by_name,
-    createdByEmail: e.created_by_email,
-    createdAt: e.created_at,
-  }));
 }
 
 export async function createCalendarEvent(
@@ -45,58 +54,78 @@ export async function createCalendarEvent(
     return { success: false, error: validation.error.issues[0]?.message };
   }
 
-  const { data: session } = await supabase.auth.getSession();
-  const userId = session?.session?.user?.id;
-  if (!userId) {
+  const currentUser = getCurrentUser();
+  if (!currentUser) {
     return { success: false, error: 'Sessão expirada. Faça login novamente.' };
   }
 
-  const { data: profile } = await supabase.from('profiles').select('name, email').eq('id', userId).single();
-  const creatorName = profile?.name || 'Colaborador';
-  const creatorEmail = profile?.email || session?.session?.user?.email || '';
+  const eventId = crypto.randomUUID();
+  const dateStr = validation.data.date;
+  const timeStr = validation.data.time || '09:00';
+  const startIso = new Date(`${dateStr}T${timeStr}:00`).toISOString();
+  const endIso = new Date(`${dateStr}T${timeStr}:00`).toISOString();
 
-  const { data: created, error } = await supabase
-    .from('calendar_events')
-    .insert({
+  const newStoredEvent: StoredEvent = {
+    id: eventId,
+    title: validation.data.title,
+    description: validation.data.description,
+    startDate: startIso,
+    endDate: endIso,
+    allDay: !validation.data.time,
+    isGlobal: validation.data.scope === 'global',
+    createdBy: currentUser.id,
+    department: currentUser.department,
+    createdAt: new Date().toISOString(),
+  };
+
+  mutate({
+    user: currentUser,
+    action: () => {
+      const events = readCollection('events', z.array(StoredEventSchema), []);
+      writeCollection('events', [newStoredEvent, ...events]);
+    },
+    audit: {
+      action: 'CALENDAR_EVENT_CREATE',
+      details: `Evento criado no calendário: ${validation.data.title} (${validation.data.date})`,
+    },
+  });
+
+  return {
+    success: true,
+    event: {
+      id: eventId,
       title: validation.data.title,
       description: validation.data.description,
       date: validation.data.date,
       time: validation.data.time,
       scope: validation.data.scope,
       category: validation.data.category,
-      created_by_id: userId,
-      created_by_name: creatorName,
-      created_by_email: creatorEmail,
-    })
-    .select()
-    .single();
-
-  if (error || !created) {
-    return { success: false, error: error?.message || 'Falha ao salvar evento.' };
-  }
-
-  return {
-    success: true,
-    event: {
-      id: created.id,
-      title: created.title,
-      description: created.description || undefined,
-      date: created.date,
-      time: created.time || undefined,
-      scope: created.scope as EventScope,
-      category: created.category as EventCategory,
-      createdById: created.created_by_id,
-      createdByName: created.created_by_name,
-      createdByEmail: created.created_by_email,
-      createdAt: created.created_at,
+      createdById: currentUser.id,
+      createdByName: currentUser.name,
+      createdByEmail: currentUser.email,
+      createdAt: newStoredEvent.createdAt,
     },
   };
 }
 
 export async function deleteCalendarEvent(id: string): Promise<{ success: boolean; error?: string }> {
-  const { error } = await supabase.from('calendar_events').delete().eq('id', id);
-  if (error) {
-    return { success: false, error: error.message };
+  const currentUser = getCurrentUser();
+  try {
+    mutate({
+      user: currentUser,
+      action: () => {
+        const events = readCollection('events', z.array(StoredEventSchema), []);
+        const remaining = events.filter((e) => e.id !== id);
+        writeCollection('events', remaining);
+      },
+      audit: {
+        action: 'CALENDAR_EVENT_DELETE',
+        details: `Evento removido do calendário (ID: ${id})`,
+      },
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Falha ao remover evento.' };
   }
-  return { success: true };
 }

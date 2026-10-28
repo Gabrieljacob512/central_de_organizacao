@@ -1,11 +1,36 @@
-import { supabase } from './supabase';
-import type { Database } from '../types/database.types';
+import { z } from 'zod';
+import {
+  deleteFile,
+  getFile,
+  MAX_FILE_SIZE,
+  saveFile,
+  validateMagicBytes,
+} from '../data/indexedDb';
+import {
+  mutate,
+  readCollection,
+  StoredAttachmentMetaSchema,
+  writeCollection,
+  type StoredAttachmentMeta,
+} from '../data/storage';
+import { getCurrentUser } from './authService';
 
-export type AttachmentRecord = Database['public']['Tables']['attachments']['Row'] & {
+export interface AttachmentRecord {
+  id: string;
+  ticket_id?: string | null;
+  comment_id?: string | null;
+  project_id?: string | null;
+  month_id?: string | null;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  description?: string;
+  storage_path: string;
+  uploaded_by: string;
+  created_at: string;
   signedUrl?: string;
-};
+}
 
-const MAX_FILE_SIZE = 1048576; // 1 MB
 const ALLOWED_MIME_TYPES = [
   'image/png',
   'image/jpeg',
@@ -31,116 +56,157 @@ export async function uploadAttachment(params: {
     };
   }
 
-  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+  // Validação preliminar de MIME type
+  if (file.type && !ALLOWED_MIME_TYPES.includes(file.type)) {
     return {
       success: false,
       error: `Formato de arquivo não suportado (${file.type}). Tipos aceitos: Imagens (PNG, JPG), PDF, TXT, Word e Excel.`,
     };
   }
 
-  const { data: session } = await supabase.auth.getSession();
-  const userId = session?.session?.user?.id;
-  if (!userId) {
-    return { success: false, error: 'Usuário não autenticado.' };
+  // Validação rigorosa por Magic Bytes
+  const magicValidation = await validateMagicBytes(file);
+  if (!magicValidation.valid) {
+    return {
+      success: false,
+      error: magicValidation.error || 'Arquivo inválido ou bloqueado por segurança.',
+    };
   }
 
-  // Sanitiza nome do arquivo
-  const sanitizedName = file.name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9._-]/g, '_');
+  const currentUser = getCurrentUser();
+  const userId = currentUser?.id || 'demo-user';
 
-  const uniqueId = crypto.randomUUID();
-  const storagePath = `${ticketId}/${uniqueId}-${sanitizedName}`;
+  const attachmentId = crypto.randomUUID();
+  const storageKey = attachmentId;
 
-  // Upload para o bucket privado
-  const { error: uploadError } = await supabase.storage
-    .from('ticket-attachments')
-    .upload(storagePath, file, {
-      contentType: file.type,
-      upsert: false,
+  try {
+    // 1. Salvar blob binário no IndexedDB (banco tecno-files)
+    await saveFile(storageKey, file, file.name);
+
+    // 2. Criar registro de metadados
+    const newMeta: StoredAttachmentMeta = {
+      id: attachmentId,
+      ticketId,
+      commentId: commentId || null,
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      sizeBytes: file.size,
+      description: description.substring(0, 200),
+      storageKey,
+      uploadedBy: userId,
+      createdAt: new Date().toISOString(),
+    };
+
+    mutate({
+      user: currentUser,
+      action: () => {
+        const metas = readCollection('attachments', z.array(StoredAttachmentMetaSchema), []);
+        writeCollection('attachments', [newMeta, ...metas]);
+      },
+      audit: {
+        action: 'ATTACHMENT_UPLOAD',
+        ticketId,
+        details: `Anexo adicionado: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
+      },
     });
 
-  if (uploadError) {
-    return { success: false, error: `Falha no upload: ${uploadError.message}` };
+    // 3. Obter URL temporária para visualização
+    const fileResult = await getFile(storageKey);
+
+    const record: AttachmentRecord = {
+      id: newMeta.id,
+      ticket_id: newMeta.ticketId,
+      comment_id: newMeta.commentId,
+      file_name: newMeta.fileName,
+      mime_type: newMeta.mimeType,
+      size_bytes: newMeta.sizeBytes,
+      description: newMeta.description,
+      storage_path: newMeta.storageKey,
+      uploaded_by: newMeta.uploadedBy,
+      created_at: newMeta.createdAt,
+      signedUrl: fileResult?.url,
+    };
+
+    return { success: true, attachment: record };
+  } catch (err: any) {
+    console.error('[attachmentService] Falha no upload do anexo:', err);
+    return {
+      success: false,
+      error: err?.message || 'Falha ao gravar arquivo no armazenamento do navegador.',
+    };
   }
-
-  // Registrar na tabela attachments
-  const { data: record, error: insertError } = await supabase
-    .from('attachments')
-    .insert({
-      ticket_id: ticketId,
-      comment_id: commentId || null,
-      uploaded_by: userId,
-      file_name: file.name,
-      mime_type: file.type,
-      size_bytes: file.size,
-      description: description.substring(0, 200),
-      storage_path: storagePath,
-    })
-    .select('*')
-    .single();
-
-  if (insertError || !record) {
-    // Rollback no storage
-    await supabase.storage.from('ticket-attachments').remove([storagePath]);
-    return { success: false, error: `Falha ao registrar anexo: ${insertError?.message}` };
-  }
-
-  // Gera URL assinada com expiração de 1 hora para visualização/download
-  const { data: signedData } = await supabase.storage
-    .from('ticket-attachments')
-    .createSignedUrl(storagePath, 3600);
-
-  return {
-    success: true,
-    attachment: {
-      ...record,
-      signedUrl: signedData?.signedUrl,
-    },
-  };
 }
 
 export async function fetchTicketAttachments(ticketId: string): Promise<AttachmentRecord[]> {
-  const { data: records, error } = await supabase
-    .from('attachments')
-    .select('*')
-    .eq('ticket_id', ticketId)
-    .order('created_at', { ascending: false });
+  try {
+    const metas = readCollection('attachments', z.array(StoredAttachmentMetaSchema), []);
+    const ticketMetas = metas.filter((m) => m.ticketId === ticketId);
 
-  if (error || !records) {
-    console.error('[attachmentService] Erro ao buscar anexos:', error);
+    const results: AttachmentRecord[] = [];
+    for (const m of ticketMetas) {
+      let signedUrl: string | undefined;
+      try {
+        const fileResult = await getFile(m.storageKey);
+        signedUrl = fileResult?.url;
+      } catch (err) {
+        console.warn(`[attachmentService] Arquivo binário não encontrado para ${m.fileName}:`, err);
+      }
+
+      results.push({
+        id: m.id,
+        ticket_id: m.ticketId,
+        comment_id: m.commentId,
+        project_id: m.projectId,
+        month_id: m.monthId,
+        file_name: m.fileName,
+        mime_type: m.mimeType,
+        size_bytes: m.sizeBytes,
+        description: m.description,
+        storage_path: m.storageKey,
+        uploaded_by: m.uploadedBy,
+        created_at: m.createdAt,
+        signedUrl,
+      });
+    }
+
+    return results;
+  } catch (err) {
+    console.error('[attachmentService] Erro ao buscar anexos:', err);
     return [];
   }
-
-  // Gerar URLs assinadas em lote
-  const results: AttachmentRecord[] = [];
-  for (const item of records) {
-    const { data: signed } = await supabase.storage
-      .from('ticket-attachments')
-      .createSignedUrl(item.storage_path, 3600);
-
-    results.push({
-      ...item,
-      signedUrl: signed?.signedUrl,
-    });
-  }
-
-  return results;
 }
 
-export async function deleteAttachment(attachmentId: string, storagePath: string): Promise<{ success: boolean; error?: string }> {
-  // 1. Remove da tabela
-  const { error: dbError } = await supabase.from('attachments').delete().eq('id', attachmentId);
-  if (dbError) {
-    return { success: false, error: dbError.message };
-  }
+export async function deleteAttachment(
+  attachmentId: string,
+  _storagePath?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const metas = readCollection('attachments', z.array(StoredAttachmentMetaSchema), []);
+    const target = metas.find((m) => m.id === attachmentId);
 
-  // 2. Remove do storage
-  const { error: storageError } = await supabase.storage.from('ticket-attachments').remove([storagePath]);
-  if (storageError) {
-    console.warn('[attachmentService] Aviso ao remover arquivo físico do storage:', storageError);
-  }
+    if (target) {
+      // 1. Remove do IndexedDB
+      await deleteFile(target.storageKey);
 
-  return { success: true };
+      // 2. Remove dos metadados
+      const currentUser = getCurrentUser();
+      mutate({
+        user: currentUser,
+        action: () => {
+          const remaining = metas.filter((m) => m.id !== attachmentId);
+          writeCollection('attachments', remaining);
+        },
+        audit: {
+          action: 'ATTACHMENT_DELETE',
+          ticketId: target.ticketId || undefined,
+          details: `Anexo excluído: ${target.fileName}`,
+        },
+      });
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[attachmentService] Falha ao excluir anexo:', err);
+    return { success: false, error: err?.message || 'Erro ao excluir anexo.' };
+  }
 }
